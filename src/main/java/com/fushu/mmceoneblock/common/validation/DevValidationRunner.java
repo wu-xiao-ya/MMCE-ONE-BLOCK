@@ -9,6 +9,7 @@ import hellfirepvp.modularmachinery.common.machine.MachineComponent;
 import hellfirepvp.modularmachinery.common.util.IEnergyHandlerAsync;
 import hellfirepvp.modularmachinery.common.util.IOInventory;
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockLever;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -30,6 +31,10 @@ public final class DevValidationRunner {
     private static final String ENABLE_PROPERTY = "mmceoneblock.devValidation";
     private static final String TARGET_ID = "starter_controller";
     private static final long EXPECTED_ENERGY = 123L;
+    private static final int INPUT_SLOT = 1;
+    private static final int FIRST_OUTPUT_SLOT = 10;
+    private static final int REDSTONE_PAUSE_TICKS = 60;
+    private static final int OUTPUT_BLOCK_TICKS = 60;
     private static boolean registered = false;
 
     private final ValidationState state = new ValidationState();
@@ -106,7 +111,41 @@ public final class DevValidationRunner {
                 fail("components_missing");
                 return;
             }
-            insertInput(tile);
+            startRedstonePause(world, tile);
+            return;
+        }
+
+        if (this.state.redstonePauseStarted && !this.state.redstonePaused) {
+            if (containsStoneOutput(tile.getInventory())) {
+                fail("redstone_pause_produced_output");
+                return;
+            }
+            if (this.state.ticks - this.state.redstonePauseStartedAt >= REDSTONE_PAUSE_TICKS) {
+                if (!containsCobblestoneInput(tile.getInventory())) {
+                    fail("redstone_pause_consumed_input");
+                    return;
+                }
+                this.state.redstonePaused = true;
+                fillOutputSlots(tile);
+                removeRedstonePause(world, tile);
+                this.state.outputBlocked = true;
+                this.state.outputBlockStartedAt = this.state.ticks;
+                MMCEOneBlock.log.info("[MMCE One Block DevValidation] redstone pause held; filled output slots to test retry");
+            }
+            return;
+        }
+
+        if (this.state.outputBlocked && !this.state.outputRecovered) {
+            if (containsStoneOutput(tile.getInventory())) {
+                fail("blocked_output_produced_output");
+                return;
+            }
+            if (this.state.ticks - this.state.outputBlockStartedAt >= OUTPUT_BLOCK_TICKS) {
+                clearOutputSlots(tile);
+                this.state.outputRecovered = true;
+                this.state.recipeStartedAt = this.state.ticks;
+                MMCEOneBlock.log.info("[MMCE One Block DevValidation] cleared blocked output slots for retry");
+            }
             return;
         }
 
@@ -137,6 +176,7 @@ public final class DevValidationRunner {
         this.state.startedAt = this.state.ticks;
 
         world.setBlockToAir(pos);
+        clearRedstonePause(world, pos);
         world.setBlockState(pos.down(), Blocks.STONE.getDefaultState(), 3);
         BlockSingleBlockMachineController block = entry.getBlock();
         world.setBlockState(pos, block.getDefaultState().withProperty(BlockController.FACING, EnumFacing.NORTH), 3);
@@ -152,13 +192,46 @@ public final class DevValidationRunner {
         return tile instanceof TileSingleBlockMachineController ? (TileSingleBlockMachineController) tile : null;
     }
 
+    private void startRedstonePause(WorldServer world, TileSingleBlockMachineController tile) {
+        for (BlockPos redstonePos : redstonePositions(this.state.pos)) {
+            world.setBlockState(redstonePos, Blocks.LEVER.getDefaultState()
+                .withProperty(BlockLever.FACING, BlockLever.EnumOrientation.EAST)
+                .withProperty(BlockLever.POWERED, Boolean.TRUE), 3);
+        }
+        tile.onNeighborChange();
+        insertInput(tile);
+        this.state.redstonePauseStarted = true;
+        this.state.redstonePauseStartedAt = this.state.ticks;
+        MMCEOneBlock.log.info(
+            "[MMCE One Block DevValidation] applied redstone pause beside controller strongPower={}",
+            world.getStrongPower(this.state.pos)
+        );
+    }
+
+    private void removeRedstonePause(WorldServer world, TileSingleBlockMachineController tile) {
+        clearRedstonePause(world, this.state.pos);
+        tile.onNeighborChange();
+    }
+
+    private void clearRedstonePause(WorldServer world, BlockPos pos) {
+        for (BlockPos redstonePos : redstonePositions(pos)) {
+            world.setBlockToAir(redstonePos);
+        }
+    }
+
+    private BlockPos[] redstonePositions(BlockPos pos) {
+        return new BlockPos[] {
+            pos.east()
+        };
+    }
+
     private void insertInput(TileSingleBlockMachineController tile) {
         IOInventory inventory = tile.getInventory();
         if (inventory.getSlots() < 3) {
             fail("inventory_too_small:" + inventory.getSlots());
             return;
         }
-        inventory.setStackInSlot(1, new ItemStack(Blocks.COBBLESTONE));
+        inventory.setStackInSlot(INPUT_SLOT, new ItemStack(Blocks.COBBLESTONE));
         this.state.recipeStartedAt = this.state.ticks;
         MMCEOneBlock.log.info("[MMCE One Block DevValidation] inserted minecraft:cobblestone into input slot");
     }
@@ -171,6 +244,30 @@ public final class DevValidationRunner {
             }
         }
         return false;
+    }
+
+    private boolean containsCobblestoneInput(IOInventory inventory) {
+        if (inventory.getSlots() <= INPUT_SLOT) {
+            return false;
+        }
+        ItemStack stack = inventory.getStackInSlot(INPUT_SLOT);
+        return !stack.isEmpty() && stack.getItem() == net.minecraft.item.Item.getItemFromBlock(Blocks.COBBLESTONE);
+    }
+
+    private void fillOutputSlots(TileSingleBlockMachineController tile) {
+        IOInventory inventory = tile.getInventory();
+        for (int slot = FIRST_OUTPUT_SLOT; slot < inventory.getSlots(); slot++) {
+            inventory.setStackInSlot(slot, new ItemStack(Blocks.DIRT));
+        }
+        tile.markDirty();
+    }
+
+    private void clearOutputSlots(TileSingleBlockMachineController tile) {
+        IOInventory inventory = tile.getInventory();
+        for (int slot = FIRST_OUTPUT_SLOT; slot < inventory.getSlots(); slot++) {
+            inventory.setStackInSlot(slot, ItemStack.EMPTY);
+        }
+        tile.markDirty();
     }
 
     private int comparator(WorldServer world) {
@@ -309,6 +406,7 @@ public final class DevValidationRunner {
 
     private void cleanup(WorldServer world) {
         if (this.state.pos != null) {
+            clearRedstonePause(world, this.state.pos);
             world.setBlockToAir(this.state.pos);
         }
     }
@@ -322,9 +420,12 @@ public final class DevValidationRunner {
     private void pass() {
         this.state.done = true;
         MMCEOneBlock.log.info(
-            "[MMCE One Block DevValidation] PASS id={} formed={} recipeFinished={} nbtPayload={} chunkReloaded={} inventoryPersisted={} energyPersisted={} comparatorAfterFormed={}",
+            "[MMCE One Block DevValidation] PASS id={} formed={} redstonePaused={} outputBlocked={} outputRecovered={} recipeFinished={} nbtPayload={} chunkReloaded={} inventoryPersisted={} energyPersisted={} comparatorAfterFormed={}",
             TARGET_ID,
             this.state.formed,
+            this.state.redstonePaused,
+            this.state.outputBlocked,
+            this.state.outputRecovered,
             this.state.recipeFinished,
             this.state.nbtPayload,
             this.state.chunkReloaded,
@@ -343,9 +444,15 @@ public final class DevValidationRunner {
         private int ticks = 0;
         private int startedAt = 0;
         private int recipeStartedAt = 0;
+        private int redstonePauseStartedAt = 0;
+        private int outputBlockStartedAt = 0;
         private int persistenceStartedAt = 0;
         private BlockPos pos = null;
         private boolean formed = false;
+        private boolean redstonePauseStarted = false;
+        private boolean redstonePaused = false;
+        private boolean outputBlocked = false;
+        private boolean outputRecovered = false;
         private boolean recipeFinished = false;
         private boolean nbtPayload = false;
         private boolean persistencePrepared = false;
