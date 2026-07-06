@@ -66,7 +66,8 @@ public final class MachineRegistry {
 
     public static synchronized void prepare(List<MachineDefinition> definitions, SingleBlockMachineTileFactory tileFactory) {
         Map<String, MachineEntry> nextEntries = new LinkedHashMap<String, MachineEntry>();
-        if (definitions == null || definitions.isEmpty()) {
+        List<MachineDefinition> enabledDefinitions = filterEnabledMachineDefinitions(definitions);
+        if (enabledDefinitions.isEmpty()) {
             ENTRIES.clear();
             return;
         }
@@ -79,14 +80,7 @@ public final class MachineRegistry {
             };
         }
 
-        for (MachineDefinition definition : definitions) {
-            if (definition == null) {
-                continue;
-            }
-            if (!definition.isEnabled()) {
-                LOGGER.info("Machine {} is disabled and will not be registered", definition.getId());
-                continue;
-            }
+        for (MachineDefinition definition : enabledDefinitions) {
             String rawId = definition.getId();
             String id = normalizeId(rawId);
             if (id.isEmpty()) {
@@ -103,6 +97,25 @@ public final class MachineRegistry {
         }
         ENTRIES.clear();
         ENTRIES.putAll(nextEntries);
+    }
+
+    static List<MachineDefinition> filterEnabledMachineDefinitions(List<MachineDefinition> definitions) {
+        if (definitions == null || definitions.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<MachineDefinition> out = new ArrayList<MachineDefinition>();
+        for (MachineDefinition definition : definitions) {
+            if (definition == null) {
+                continue;
+            }
+            if (!definition.isEnabled()) {
+                LOGGER.info("Machine {} is disabled and will not be registered", definition.getId());
+                continue;
+            }
+            out.add(definition);
+        }
+        return out;
     }
 
     public static synchronized void validateLoadedMachines() {

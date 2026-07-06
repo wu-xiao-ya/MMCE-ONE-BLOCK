@@ -30,6 +30,8 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
+import java.lang.reflect.Field;
+import java.util.List;
 import java.util.UUID;
 
 @SideOnly(Side.CLIENT)
@@ -406,10 +408,13 @@ public final class ClientGuiValidationRunner {
             fail("internal_slot_unexpected:" + className(internal));
             return;
         }
+        if (!verifyRuntimeStyle(screen)) {
+            return;
+        }
 
         this.done = true;
         MMCEOneBlock.log.info(
-            "[MMCE One Block ClientGuiValidation] PASS id={} screen={} container={} slotCount={} blueprintSlot={} firstInternalSlot={} guiStyle={} openMode={} displayed=true",
+            "[MMCE One Block ClientGuiValidation] PASS id={} screen={} container={} slotCount={} blueprintSlot={} firstInternalSlot={} guiStyle={} openMode={} styleRuntime=true styleText=smoke_title styleButton=smoke_cycle styleProgress=smoke_progress styleDynamic=smoke_progress_fill displayed=true",
             TARGET_ID,
             screenName,
             container.getClass().getName(),
@@ -419,6 +424,87 @@ public final class ClientGuiValidationRunner {
             EXPECTED_STYLE,
             this.directFallbackGuiOpen ? "directFallback" : "serverGuiHandler"
         );
+    }
+
+    private boolean verifyRuntimeStyle(GuiScreen screen) {
+        try {
+            Object style = readField(screen, "styleOverride");
+            if (style == null) {
+                fail("runtime_style_missing");
+                return false;
+            }
+
+            if (findStyleEntry(style, "texts", "id", "smoke_title") == null
+                || findStyleEntry(style, "texts", "value", "One Block Smoke") == null) {
+                fail("runtime_style_text_missing");
+                return false;
+            }
+            if (findStyleEntry(style, "buttons", "id", "smoke_cycle") == null
+                || findStyleEntry(style, "buttons", "action", "event") == null
+                || findStyleEntry(style, "buttons", "buttonId", "smoke_pulse") == null) {
+                fail("runtime_style_button_missing");
+                return false;
+            }
+            if (findStyleEntry(style, "progressBars", "id", "smoke_progress") == null
+                || findStyleEntry(style, "progressBars", "source", "machine_progress") == null) {
+                fail("runtime_style_progress_missing");
+                return false;
+            }
+
+            Object dynamic = findStyleEntry(style, "dynamicVisuals", "id", "smoke_progress_fill");
+            if (dynamic == null) {
+                fail("runtime_style_dynamic_missing");
+                return false;
+            }
+            Object source = readField(dynamic, "source");
+            Object renderer = readField(dynamic, "renderer");
+            if (!"recipeProgress".equals(readField(source, "metric"))
+                || !"fill".equals(readField(renderer, "type"))
+                || !"right".equals(readField(renderer, "direction"))) {
+                fail("runtime_style_dynamic_unexpected");
+                return false;
+            }
+            return true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
+            fail("runtime_style_exception=" + ex.getClass().getName() + ":" + ex.getMessage());
+            return false;
+        }
+    }
+
+    private static Object findStyleEntry(Object style, String listField, String fieldName, String expected)
+        throws ReflectiveOperationException {
+        Object value = readField(style, listField);
+        if (!(value instanceof List<?>)) {
+            return null;
+        }
+
+        for (Object entry : (List<?>) value) {
+            if (expected.equals(readField(entry, fieldName))) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private static Object readField(Object target, String name) throws ReflectiveOperationException {
+        if (target == null) {
+            return null;
+        }
+        Field field = findField(target.getClass(), name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     private TileSingleBlockMachineController getTile(Minecraft mc) {

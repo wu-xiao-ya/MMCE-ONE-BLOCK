@@ -35,7 +35,7 @@ public final class TileSingleBlockMachineControllerTest {
 
         Collection<MachineComponent<?>> components = tile.provideMachineComponents();
 
-        assertEquals(4, components.size());
+        assertEquals(5, components.size());
         assertSame(components, tile.provideMachineComponents());
         assertEquals(tile.getUniqueGroupID(), tile.getMachineComponentGroupId());
         assertEquals(new ResourceLocation("mmceoneblock", "runtime_test"), tile.getMachineControllerGuiStyle());
@@ -44,6 +44,7 @@ public final class TileSingleBlockMachineControllerTest {
         boolean sawItemInput = false;
         boolean sawFluidInput = false;
         boolean sawGasInput = false;
+        boolean sawEnergyInput = false;
         boolean sawEnergyOutput = false;
 
         for (MachineComponent<?> component : components) {
@@ -68,16 +69,24 @@ public final class TileSingleBlockMachineControllerTest {
                 assertEquals(IOType.INPUT, component.getIOType());
                 assertEquals(8000, ((MultiGasTank) provider).getCapacity());
             } else if (provider instanceof IEnergyHandlerAsync) {
-                sawEnergyOutput = true;
                 assertEquals(ComponentTypesMM.COMPONENT_ENERGY, component.getComponentType());
-                assertEquals(IOType.OUTPUT, component.getIOType());
+                assertTrue(
+                    "energy components should expose input or output io",
+                    component.getIOType() == IOType.INPUT || component.getIOType() == IOType.OUTPUT
+                );
                 assertEquals(100000L, ((IEnergyHandlerAsync) provider).getMaxEnergy());
+                if (component.getIOType() == IOType.INPUT) {
+                    sawEnergyInput = true;
+                } else {
+                    sawEnergyOutput = true;
+                }
             }
         }
 
         assertTrue(sawItemInput);
         assertTrue(sawFluidInput);
         assertTrue(sawGasInput);
+        assertTrue(sawEnergyInput);
         assertTrue(sawEnergyOutput);
         assertFalse(groupIds.contains(Long.valueOf(-1L)));
     }
@@ -87,6 +96,7 @@ public final class TileSingleBlockMachineControllerTest {
             new MachineComponentDefinition("item_input", "items_in", true, "Items In", withInt("slots", 2)),
             new MachineComponentDefinition("fluid_input", "fluid_in", true, "Fluid In", withInt("capacity", 16000)),
             new MachineComponentDefinition("gas_input", "gas_in", true, "Gas In", withInt("capacity", 8000)),
+            new MachineComponentDefinition("energy_input", "energy_in", true, "Energy In", withInt("capacity", 100000)),
             new MachineComponentDefinition("energy_output", "energy_out", true, "Energy Out", withInt("capacity", 100000))
         );
         return new MachineDefinition(

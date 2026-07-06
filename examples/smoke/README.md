@@ -62,10 +62,12 @@ single-block definition against MMCE. The client GUI smoke additionally proves
 that the client can load the addon and standalone MMCEGE style fixture without a
 missing blockstate for the smoke backing controller, display MMCEGE's resizable
 controller GUI, and preserve the blueprint/internal slot ordering used by the
-screen. When the headless client receives the placed tile normally, it opens the
-one-block controller through the Forge GUI handler; if CI does not retain the
-client tile after server placement, it directly constructs the same one-block
-container and MMCEGE GUI bridge after server placement has already succeeded.
+screen. It also checks that the smoke text, button, progress bar, and dynamic
+visual are bound into the runtime MMCEGE controller style. When the headless
+client receives the placed tile normally, it opens the one-block controller
+through the Forge GUI handler; if CI does not retain the client tile after server
+placement, it directly constructs the same one-block container and MMCEGE GUI
+bridge after server placement has already succeeded.
 Unit tests parse the style fixture through MMCEGE's machine-style parser so the
 text, button, progress bar, and dynamic visual entries cannot silently drift out
 of schema. The dev validation smoke proves real server-side placement, structure

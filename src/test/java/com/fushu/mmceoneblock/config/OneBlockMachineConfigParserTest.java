@@ -73,6 +73,47 @@ public final class OneBlockMachineConfigParserTest {
     }
 
     @Test
+    public void rejectsMachineDefinitionsWithoutMachine() throws IOException {
+        Path file = writeTempConfig("{"
+            + "\"id\":\"broken\","
+            + "\"displayName\":\"Broken\","
+            + "\"block\":{\"model\":\"mmceoneblock:single_block_machine_controller\",\"texture\":\"mmceoneblock:blocks/starter\"},"
+            + "\"components\":[\"item_input\"],"
+            + "\"guiStyle\":\"mmceoneblock:broken\""
+            + "}");
+
+        try {
+            MachineConfigLoader.load(file);
+            fail("missing machine should be rejected");
+        } catch (MachineConfigException ex) {
+            assertTrue(ex.getMessage().contains("missing machine"));
+        } finally {
+            Files.deleteIfExists(file);
+        }
+    }
+
+    @Test
+    public void rejectsMachineDefinitionsWithEmptyMachine() throws IOException {
+        Path file = writeTempConfig("{"
+            + "\"id\":\"broken\","
+            + "\"machine\":\" \","
+            + "\"displayName\":\"Broken\","
+            + "\"block\":{\"model\":\"mmceoneblock:single_block_machine_controller\",\"texture\":\"mmceoneblock:blocks/starter\"},"
+            + "\"components\":[\"item_input\"],"
+            + "\"guiStyle\":\"mmceoneblock:broken\""
+            + "}");
+
+        try {
+            MachineConfigLoader.load(file);
+            fail("empty machine should be rejected");
+        } catch (MachineConfigException ex) {
+            assertTrue(ex.getMessage().contains("missing machine"));
+        } finally {
+            Files.deleteIfExists(file);
+        }
+    }
+
+    @Test
     public void rejectsDuplicateComponentIds() throws IOException {
         Path file = writeTempConfig("{"
             + "\"id\":\"broken\","

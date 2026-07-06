@@ -29,6 +29,7 @@ if ($RequireGuiValidation) {
     $required += '[MMCE One Block ClientGuiValidation] PASS id=starter_controller'
     $required += 'screen=com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable'
     $required += 'container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockController'
+    $required += 'styleRuntime=true'
     $required += 'displayed=true'
 }
 

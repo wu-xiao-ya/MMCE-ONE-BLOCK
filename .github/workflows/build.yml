@@ -251,6 +251,7 @@ jobs:
               && grep -q "\\[MMCE One Block ClientGuiValidation\\] PASS id=starter_controller" "$log" \
               && grep -q "screen=com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable" "$log" \
               && grep -q "container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockController" "$log" \
+              && grep -q "styleRuntime=true" "$log" \
               && grep -q "displayed=true" "$log"; then
               loaded=1
               break
