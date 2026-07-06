@@ -210,6 +210,7 @@ jobs:
         working-directory: mmce-src
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
+          _JAVA_OPTIONS: -Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=true
         run: |
           if ! command -v xvfb-run >/dev/null 2>&1; then
             sudo apt-get update
@@ -218,7 +219,7 @@ jobs:
           mkdir -p ../mmce-one-block/run/logs
           rm -f ../mmce-one-block/run/logs/latest.log
           set +e
-          setsid xvfb-run -a ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain runClient --stacktrace &
+          setsid xvfb-run -a -s "-screen 0 1280x1024x24 +extension GLX +render -noreset" ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain runClient --stacktrace &
           client_pid=$!
           loaded=0
           deadline=$((SECONDS + 180))
