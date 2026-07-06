@@ -1,6 +1,7 @@
 .gradle/
 build/
 run/
+/resources/
 logs/
 *.log
 *.iml

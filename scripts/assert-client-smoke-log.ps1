@@ -34,6 +34,8 @@ foreach ($needle in $required) {
 $forbidden = @(
     'Skipping one-block machine',
     'Caught exception from MMCE One Block',
+    'Exception loading model for variant modularmachinery:starter_machine_controller',
+    'FileNotFoundException: modularmachinery:blockstates/starter_machine_controller.json',
     'A fatal error has occurred',
     'Crash report saved to'
 )

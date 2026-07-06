@@ -49,8 +49,9 @@ one-block controller.
 This smoke fixture is a launch-level gate. It proves that Forge loads the addon,
 MMCE loads the backing machine and recipe, and MMCE One Block validates the
 single-block definition against MMCE. The client launch smoke additionally proves
-that the client can load the addon and standalone MMCEGE style fixture. The dev
-validation smoke proves real server-side placement, structure formation, recipe
-execution, addon NBT payload, chunk reload persistence, comparator formed output,
-and real destroy/drop cleanup for this fixture. It does not prove real GUI
-opening, shift-click mouse handling, or visual GUI style rendering.
+that the client can load the addon and standalone MMCEGE style fixture without a
+missing blockstate for the smoke backing controller. The dev validation smoke
+proves real server-side placement, structure formation, recipe execution, addon
+NBT payload, chunk reload persistence, comparator formed output, and real
+destroy/drop cleanup for this fixture. It does not prove real GUI opening,
+shift-click mouse handling, or visual GUI style rendering.

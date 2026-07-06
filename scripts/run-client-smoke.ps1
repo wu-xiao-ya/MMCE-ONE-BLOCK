@@ -36,6 +36,9 @@ try {
         }
         if (Test-Path -LiteralPath $logPath) {
             $log = Get-Content -LiteralPath $logPath -Raw
+            if ($null -eq $log) {
+                $log = ''
+            }
             $loaded = $log.Contains('Forge Mod Loader has successfully loaded') `
                 -and $log.Contains('Loaded 1 one-block machine definition(s)') `
                 -and $log.Contains('Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)')
