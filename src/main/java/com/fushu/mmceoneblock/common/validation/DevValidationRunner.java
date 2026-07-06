@@ -17,6 +17,8 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.WorldServer;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.gen.ChunkProviderServer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -27,6 +29,7 @@ import java.util.Collection;
 public final class DevValidationRunner {
     private static final String ENABLE_PROPERTY = "mmceoneblock.devValidation";
     private static final String TARGET_ID = "starter_controller";
+    private static final long EXPECTED_ENERGY = 123L;
     private static boolean registered = false;
 
     private final ValidationState state = new ValidationState();
@@ -72,6 +75,16 @@ public final class DevValidationRunner {
             return;
         }
 
+        if (this.state.persistencePrepared && !this.state.chunkUnloaded) {
+            waitForChunkUnload(world);
+            return;
+        }
+
+        if (this.state.chunkUnloaded && !this.state.chunkReloaded) {
+            reloadChunkAndValidate(world);
+            return;
+        }
+
         TileSingleBlockMachineController tile = getTile(world);
         if (tile == null) {
             fail("tile_missing");
@@ -104,8 +117,7 @@ public final class DevValidationRunner {
                 if (!validateNbtPayload(tile)) {
                     return;
                 }
-                cleanup(world);
-                pass();
+                prepareChunkReloadValidation(world, tile);
                 return;
             }
             timeoutAfter(360, "recipe_not_finished");
@@ -119,9 +131,8 @@ public final class DevValidationRunner {
             return;
         }
 
-        BlockPos base = world.getSpawnPoint().add(3, 0, 3);
-        BlockPos top = world.getTopSolidOrLiquidBlock(base);
-        BlockPos pos = top.getY() <= 0 ? new BlockPos(base.getX(), 80, base.getZ()) : top.up();
+        BlockPos spawn = world.getSpawnPoint();
+        BlockPos pos = new BlockPos(spawn.getX() + 1024, Math.max(80, spawn.getY() + 1), spawn.getZ() + 1024);
         this.state.pos = pos;
         this.state.startedAt = this.state.ticks;
 
@@ -170,7 +181,9 @@ public final class DevValidationRunner {
     private boolean validateNbtPayload(TileSingleBlockMachineController tile) {
         IEnergyHandlerAsync energy = findEnergy(tile.provideMachineComponents());
         if (energy != null) {
-            energy.setCurrentEnergy(123L);
+            energy.setCurrentEnergy(EXPECTED_ENERGY);
+            this.state.expectedEnergy = EXPECTED_ENERGY;
+            this.state.energySeeded = true;
         }
         NBTTagCompound tag = new NBTTagCompound();
         tile.writeToNBT(tag);
@@ -184,6 +197,104 @@ public final class DevValidationRunner {
         }
         this.state.nbtPayload = true;
         return true;
+    }
+
+    private void prepareChunkReloadValidation(WorldServer world, TileSingleBlockMachineController tile) {
+        if (!containsStoneOutput(tile.getInventory())) {
+            fail("persistence_output_missing_before_save");
+            return;
+        }
+        tile.markDirty();
+        ChunkProviderServer provider = world.getChunkProvider();
+        Chunk chunk = findLoadedChunk(provider, this.state.pos.getX() >> 4, this.state.pos.getZ() >> 4);
+        if (chunk == null) {
+            fail("persistence_chunk_missing_before_save");
+            return;
+        }
+        chunk.markDirty();
+        try {
+            provider.saveChunks(true);
+        } catch (Exception ex) {
+            fail("persistence_save_failed:" + ex.getClass().getName() + ":" + ex.getMessage());
+            return;
+        }
+        this.state.persistencePrepared = true;
+        this.state.persistenceStartedAt = this.state.ticks;
+        MMCEOneBlock.log.info("[MMCE One Block DevValidation] saved and queued chunk reload check pos={}", this.state.pos);
+        if (requestChunkUnload(provider)) {
+            this.state.chunkUnloaded = true;
+            MMCEOneBlock.log.info("[MMCE One Block DevValidation] chunk unloaded pos={}", this.state.pos);
+        }
+    }
+
+    private void waitForChunkUnload(WorldServer world) {
+        ChunkProviderServer provider = world.getChunkProvider();
+        if (requestChunkUnload(provider)) {
+            this.state.chunkUnloaded = true;
+            MMCEOneBlock.log.info("[MMCE One Block DevValidation] chunk unloaded pos={}", this.state.pos);
+            return;
+        }
+        if (this.state.ticks - this.state.persistenceStartedAt > 120) {
+            fail("chunk_not_unloaded");
+        }
+    }
+
+    private void reloadChunkAndValidate(WorldServer world) {
+        ChunkProviderServer provider = world.getChunkProvider();
+        provider.loadChunk(this.state.pos.getX() >> 4, this.state.pos.getZ() >> 4);
+        TileSingleBlockMachineController tile = getTile(world);
+        if (tile == null) {
+            fail("tile_missing_after_chunk_reload");
+            return;
+        }
+        if (!TARGET_ID.equals(tile.getDefinitionId())) {
+            fail("definition_mismatch_after_chunk_reload:" + tile.getDefinitionId());
+            return;
+        }
+        if (tile.provideMachineComponents().isEmpty()) {
+            fail("components_missing_after_chunk_reload");
+            return;
+        }
+        if (!containsStoneOutput(tile.getInventory())) {
+            fail("inventory_missing_after_chunk_reload");
+            return;
+        }
+        this.state.inventoryPersisted = true;
+
+        IEnergyHandlerAsync energy = findEnergy(tile.provideMachineComponents());
+        if (this.state.energySeeded && (energy == null || energy.getCurrentEnergy() != this.state.expectedEnergy)) {
+            fail("energy_mismatch_after_chunk_reload:" + (energy == null ? "missing" : Long.toString(energy.getCurrentEnergy())));
+            return;
+        }
+        this.state.energyPersisted = !this.state.energySeeded || energy != null;
+        this.state.chunkReloaded = true;
+        MMCEOneBlock.log.info(
+            "[MMCE One Block DevValidation] chunk reload persisted id={} inventoryPersisted={} energyPersisted={}",
+            TARGET_ID,
+            this.state.inventoryPersisted,
+            this.state.energyPersisted
+        );
+        cleanup(world);
+        pass();
+    }
+
+    private boolean requestChunkUnload(ChunkProviderServer provider) {
+        Chunk chunk = findLoadedChunk(provider, this.state.pos.getX() >> 4, this.state.pos.getZ() >> 4);
+        if (chunk == null) {
+            return true;
+        }
+        provider.queueUnload(chunk);
+        provider.tick();
+        return findLoadedChunk(provider, this.state.pos.getX() >> 4, this.state.pos.getZ() >> 4) == null;
+    }
+
+    private Chunk findLoadedChunk(ChunkProviderServer provider, int chunkX, int chunkZ) {
+        for (Chunk chunk : provider.getLoadedChunks()) {
+            if (chunk.x == chunkX && chunk.z == chunkZ) {
+                return chunk;
+            }
+        }
+        return null;
     }
 
     private IEnergyHandlerAsync findEnergy(Collection<MachineComponent<?>> components) {
@@ -211,11 +322,14 @@ public final class DevValidationRunner {
     private void pass() {
         this.state.done = true;
         MMCEOneBlock.log.info(
-            "[MMCE One Block DevValidation] PASS id={} formed={} recipeFinished={} nbtPayload={} comparatorAfterFormed={}",
+            "[MMCE One Block DevValidation] PASS id={} formed={} recipeFinished={} nbtPayload={} chunkReloaded={} inventoryPersisted={} energyPersisted={} comparatorAfterFormed={}",
             TARGET_ID,
             this.state.formed,
             this.state.recipeFinished,
             this.state.nbtPayload,
+            this.state.chunkReloaded,
+            this.state.inventoryPersisted,
+            this.state.energyPersisted,
             this.state.comparatorAfterFormed
         );
     }
@@ -229,11 +343,19 @@ public final class DevValidationRunner {
         private int ticks = 0;
         private int startedAt = 0;
         private int recipeStartedAt = 0;
+        private int persistenceStartedAt = 0;
         private BlockPos pos = null;
         private boolean formed = false;
         private boolean recipeFinished = false;
         private boolean nbtPayload = false;
+        private boolean persistencePrepared = false;
+        private boolean chunkUnloaded = false;
+        private boolean chunkReloaded = false;
+        private boolean inventoryPersisted = false;
+        private boolean energySeeded = false;
+        private boolean energyPersisted = false;
         private boolean done = false;
         private int comparatorAfterFormed = 0;
+        private long expectedEnergy = 0L;
     }
 }

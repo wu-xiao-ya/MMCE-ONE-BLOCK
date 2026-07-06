@@ -195,6 +195,9 @@ jobs:
           grep -q "formed=true" "$log"
           grep -q "recipeFinished=true" "$log"
           grep -q "nbtPayload=true" "$log"
+          grep -q "chunkReloaded=true" "$log"
+          grep -q "inventoryPersisted=true" "$log"
+          grep -q "energyPersisted=true" "$log"
           grep -q "comparatorAfterFormed=1" "$log"
           if grep -q "Skipping one-block machine" "$log"; then
             exit 1

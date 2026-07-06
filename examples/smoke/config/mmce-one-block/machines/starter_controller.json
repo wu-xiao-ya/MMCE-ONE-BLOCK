@@ -19,6 +19,12 @@
       "id": "items_out",
       "displayName": "Item Output",
       "slots": 9
+    },
+    {
+      "type": "energy_input",
+      "id": "energy_in",
+      "displayName": "Energy Input",
+      "capacity": 1000
     }
   ],
   "guiStyle": "mmceoneblock:starter_controller"

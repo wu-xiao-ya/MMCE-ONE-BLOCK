@@ -19,10 +19,16 @@ $required = @(
     '[MMCE One Block DevValidation] Enabled',
     '[MMCE One Block DevValidation] placed id=starter_controller',
     '[MMCE One Block DevValidation] inserted minecraft:cobblestone into input slot',
+    '[MMCE One Block DevValidation] saved and queued chunk reload check',
+    '[MMCE One Block DevValidation] chunk unloaded',
+    '[MMCE One Block DevValidation] chunk reload persisted id=starter_controller',
     '[MMCE One Block DevValidation] PASS id=starter_controller',
     'formed=true',
     'recipeFinished=true',
     'nbtPayload=true',
+    'chunkReloaded=true',
+    'inventoryPersisted=true',
+    'energyPersisted=true',
     'comparatorAfterFormed=1'
 )
 
