@@ -1,6 +1,7 @@
 param(
-    [int]$TimeoutSeconds = 180,
-    [switch]$SkipPrepare
+    [int]$TimeoutSeconds = 300,
+    [switch]$SkipPrepare,
+    [switch]$GuiValidation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,7 +25,11 @@ if (-not (Test-Path -LiteralPath $gradle)) {
     throw "Gradle wrapper not found: $gradle"
 }
 
-$args = @('--no-daemon', '--no-parallel', '--console=plain', 'runClient', '--stacktrace')
+$args = @('--no-daemon', '--no-parallel', '--console=plain')
+if ($GuiValidation) {
+    $args += '-PmmceOneBlockClientGuiValidation=true'
+}
+$args += @('runClient', '--stacktrace')
 $process = Start-Process -FilePath $gradle -ArgumentList $args -WorkingDirectory $repoRoot -PassThru -WindowStyle Hidden
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $loaded = $false
@@ -39,9 +44,15 @@ try {
             if ($null -eq $log) {
                 $log = ''
             }
+            if ($log.Contains('[MMCE One Block ClientGuiValidation] FAIL')) {
+                throw "Client GUI validation failed; inspect log: $logPath"
+            }
             $loaded = $log.Contains('Forge Mod Loader has successfully loaded') `
                 -and $log.Contains('Loaded 1 one-block machine definition(s)') `
                 -and $log.Contains('Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)')
+            if ($GuiValidation) {
+                $loaded = $loaded -and $log.Contains('[MMCE One Block ClientGuiValidation] PASS id=starter_controller')
+            }
             if ($loaded) {
                 break
             }
@@ -67,7 +78,11 @@ try {
         }
 }
 
-& (Join-Path $scriptDir 'assert-client-smoke-log.ps1') -LogPath $logPath
+if ($GuiValidation) {
+    & (Join-Path $scriptDir 'assert-client-smoke-log.ps1') -LogPath $logPath -RequireGuiValidation
+} else {
+    & (Join-Path $scriptDir 'assert-client-smoke-log.ps1') -LogPath $logPath
+}
 
 $savedLog = Join-Path $logDir 'client-smoke-latest.log'
 Copy-Item -LiteralPath $logPath -Destination $savedLog -Force

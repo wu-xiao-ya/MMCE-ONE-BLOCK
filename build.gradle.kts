@@ -97,6 +97,9 @@ tasks.withType<JavaExec>().configureEach {
         if ((project.findProperty("mmceOneBlockDevValidation") as String?)?.toBoolean() == true) {
             systemProperty("mmceoneblock.devValidation", "true")
         }
+        if ((project.findProperty("mmceOneBlockClientGuiValidation") as String?)?.toBoolean() == true) {
+            systemProperty("mmceoneblock.clientGuiValidation", "true")
+        }
     }
 }
 

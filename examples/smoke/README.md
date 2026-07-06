@@ -23,6 +23,16 @@ For a local client launch smoke, use:
 
 That script starts `runClient`, waits for the client log to show that Forge,
 MMCEGE, MMCE One Block, and this fixture loaded, then closes the dev client.
+For the stronger headless GUI pass, use:
+
+```powershell
+.\scripts\run-client-smoke.ps1 -GuiValidation
+```
+
+That variant also launches an integrated smoke world, places
+`starter_controller`, opens its controller GUI through the Forge GUI handler when
+the client receives the placed tile normally, and waits until MMCEGE's resizable
+controller GUI is the current client screen.
 
 For a stronger server-side integration pass, use:
 
@@ -48,12 +58,18 @@ one-block controller.
 
 This smoke fixture is a launch-level gate. It proves that Forge loads the addon,
 MMCE loads the backing machine and recipe, and MMCE One Block validates the
-single-block definition against MMCE. The client launch smoke additionally proves
+single-block definition against MMCE. The client GUI smoke additionally proves
 that the client can load the addon and standalone MMCEGE style fixture without a
-missing blockstate for the smoke backing controller. Unit tests parse the style
-fixture through MMCEGE's machine-style parser so the text, button, progress bar,
-and dynamic visual entries cannot silently drift out of schema. The dev validation smoke
-proves real server-side placement, structure formation, recipe execution, addon
-NBT payload, chunk reload persistence, comparator formed output, and real
-destroy/drop cleanup for this fixture. It does not prove real GUI opening,
-shift-click mouse handling, or visual GUI style rendering.
+missing blockstate for the smoke backing controller, display MMCEGE's resizable
+controller GUI, and preserve the blueprint/internal slot ordering used by the
+screen. When the headless client receives the placed tile normally, it opens the
+one-block controller through the Forge GUI handler; if CI does not retain the
+client tile after server placement, it directly constructs the same one-block
+container and MMCEGE GUI bridge after server placement has already succeeded.
+Unit tests parse the style fixture through MMCEGE's machine-style parser so the
+text, button, progress bar, and dynamic visual entries cannot silently drift out
+of schema. The dev validation smoke proves real server-side placement, structure
+formation, recipe execution, addon NBT payload, chunk reload persistence,
+comparator formed output, and real destroy/drop cleanup for this fixture. It
+does not prove shift-click mouse handling, pixel-level visual GUI rendering, or
+the fallback mode's network GUI packet path.

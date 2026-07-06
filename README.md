@@ -79,15 +79,21 @@ There is also a local client launch smoke. It prepares the same fixture, starts 
 .\scripts\run-client-smoke.ps1
 ```
 
+For the stronger client GUI pass used by CI, add `-GuiValidation`. This launches a headless integrated smoke world, places the smoke controller near the client player, opens the one-block controller through the Forge GUI handler when the client receives the placed tile normally, and waits for MMCEGE's resizable controller GUI to become the current screen:
+
+```powershell
+.\scripts\run-client-smoke.ps1 -GuiValidation
+```
+
 For a stronger local server-side integration pass, run the dev validation smoke. It starts `runServer` with `mmceOneBlockDevValidation=true`, places the smoke controller in a real dev world, waits for structure formation, inserts cobblestone, proves redstone power pauses recipe progress, proves blocked output slots retry after being cleared, waits for the backing MMCE recipe to output stone, checks the addon NBT payload, saves and unloads the test chunk, reloads it, verifies persisted inventory and energy payload, verifies the formed comparator level, and destroys the controller through the real world drop path to prove the block item drops and the tile is cleared:
 
 ```powershell
 .\scripts\run-dev-validation-smoke.ps1
 ```
 
-In GitHub Actions, push and pull-request runs launch the same fixture, assert the server log, and run a headless client launch smoke by default. Manual workflow runs can set `run_smoke=false` or `run_client_smoke=false` when a fast compile-only check is needed.
+In GitHub Actions, push and pull-request runs launch the same fixture, assert the server log, and run a headless client smoke with GUI validation by default. Manual workflow runs can set `run_smoke=false` or `run_client_smoke=false` when a fast compile-only check is needed.
 
-The server smoke proves mod loading, backing machine loading, recipe loading, and one-block definition validation. The dev validation smoke additionally proves real server-world placement, structure formation, redstone pause behavior, blocked-output retry, recipe completion, addon NBT payload, chunk unload/reload persistence for inventory and energy payload, comparator formed output, and real destroy/drop cleanup for the smoke fixture. The client launch smoke proves the client can load the addon, MMCEGE, and the standalone style fixture locally and in CI. Unit tests cover the single-block shift-click routing rules, addon-owned NBT payload, MMCEGE GUI bridge contract, and MMCEGE parsing of the smoke text/button/progress/dynamic-visual style. These checks still do not prove real GUI opening, real mouse click handling, or visual rendering on screen; those need a client/in-game verification pass.
+The server smoke proves mod loading, backing machine loading, recipe loading, and one-block definition validation. The dev validation smoke additionally proves real server-world placement, structure formation, redstone pause behavior, blocked-output retry, recipe completion, addon NBT payload, chunk unload/reload persistence for inventory and energy payload, comparator formed output, and real destroy/drop cleanup for the smoke fixture. The client GUI smoke proves the client can load the addon, MMCEGE, and the standalone style fixture, display MMCEGE's resizable controller GUI, and preserve the blueprint/internal slot ordering used by the screen. When the headless client receives the placed tile normally, the smoke opens the controller through the Forge GUI handler; if CI does not retain the client tile after server placement, it falls back to directly constructing the same one-block container and MMCEGE GUI bridge after server placement has already succeeded. Unit tests cover the single-block shift-click routing rules, addon-owned NBT payload, MMCEGE GUI bridge contract, and MMCEGE parsing of the smoke text/button/progress/dynamic-visual style. These checks still do not prove real mouse click handling, pixel-level visual rendering on screen, or the fallback mode's network GUI packet path; those need a stricter client interaction or screenshot pass.
 
 ## Test coverage
 

@@ -228,13 +228,16 @@ jobs:
           mkdir -p ../mmce-one-block/run/logs
           rm -f ../mmce-one-block/run/logs/latest.log
           set +e
-          setsid xvfb-run -a -s "-screen 0 1280x1024x24 +extension RANDR +extension GLX +render -noreset" bash -lc 'xrandr -q || true; exec ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain runClient --stacktrace' &
+          setsid xvfb-run -a -s "-screen 0 1280x1024x24 +extension RANDR +extension GLX +render -noreset" bash -lc 'xrandr -q || true; exec ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain -PmmceOneBlockClientGuiValidation=true runClient --stacktrace' &
           client_pid=$!
           loaded=0
-          deadline=$((SECONDS + 180))
+          deadline=$((SECONDS + 300))
           log="../mmce-one-block/run/logs/latest.log"
           while [ "$SECONDS" -lt "$deadline" ]; do
             if ! kill -0 "$client_pid" >/dev/null 2>&1; then
+              break
+            fi
+            if [ -f "$log" ] && grep -q "\\[MMCE One Block ClientGuiValidation\\] FAIL" "$log"; then
               break
             fi
             if [ -f "$log" ] \
@@ -244,7 +247,11 @@ jobs:
               && grep -q "Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)" "$log" \
               && grep -q "Forge Mod Loader has successfully loaded" "$log" \
               && grep -q "mmceoneblock" "$log" \
-              && grep -q "mmceguiext" "$log"; then
+              && grep -q "mmceguiext" "$log" \
+              && grep -q "\\[MMCE One Block ClientGuiValidation\\] PASS id=starter_controller" "$log" \
+              && grep -q "screen=com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable" "$log" \
+              && grep -q "container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockController" "$log" \
+              && grep -q "displayed=true" "$log"; then
               loaded=1
               break
             fi
@@ -269,6 +276,9 @@ jobs:
             exit 1
           fi
           if grep -q "Caught exception from MMCE One Block" "$log"; then
+            exit 1
+          fi
+          if grep -q "\\[MMCE One Block ClientGuiValidation\\] FAIL" "$log"; then
             exit 1
           fi
           if grep -q "Exception loading model for variant modularmachinery:starter_machine_controller" "$log"; then

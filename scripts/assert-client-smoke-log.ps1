@@ -1,5 +1,6 @@
 param(
-    [string]$LogPath = ""
+    [string]$LogPath = "",
+    [switch]$RequireGuiValidation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +25,12 @@ $required = @(
     'mmceoneblock',
     'mmceguiext'
 )
+if ($RequireGuiValidation) {
+    $required += '[MMCE One Block ClientGuiValidation] PASS id=starter_controller'
+    $required += 'screen=com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable'
+    $required += 'container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockController'
+    $required += 'displayed=true'
+}
 
 foreach ($needle in $required) {
     if (-not $log.Contains($needle)) {
@@ -37,7 +44,8 @@ $forbidden = @(
     'Exception loading model for variant modularmachinery:starter_machine_controller',
     'FileNotFoundException: modularmachinery:blockstates/starter_machine_controller.json',
     'A fatal error has occurred',
-    'Crash report saved to'
+    'Crash report saved to',
+    '[MMCE One Block ClientGuiValidation] FAIL'
 )
 
 foreach ($needle in $forbidden) {

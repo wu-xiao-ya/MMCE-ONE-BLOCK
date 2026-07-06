@@ -76,27 +76,27 @@ public class ContainerSingleBlockController extends ContainerController {
         }
     }
 
-    static int playerSlotCount() {
+    public static int playerSlotCount() {
         return PLAYER_SLOT_COUNT;
     }
 
-    static int controllerSlotStart() {
+    public static int controllerSlotStart() {
         return blueprintSlotIndex();
     }
 
-    static int blueprintSlotIndex() {
+    public static int blueprintSlotIndex() {
         return PLAYER_SLOT_COUNT + TileMultiblockMachineController.BLUEPRINT_SLOT;
     }
 
-    static int firstInternalSlotIndex() {
+    public static int firstInternalSlotIndex() {
         return blueprintSlotIndex() + 1;
     }
 
-    static boolean isBlueprintSlotIndex(int index) {
+    public static boolean isBlueprintSlotIndex(int index) {
         return index == blueprintSlotIndex();
     }
 
-    static boolean isInternalSlotIndex(int index, int slotCount) {
+    public static boolean isInternalSlotIndex(int index, int slotCount) {
         return index >= firstInternalSlotIndex() && index < slotCount;
     }
 
