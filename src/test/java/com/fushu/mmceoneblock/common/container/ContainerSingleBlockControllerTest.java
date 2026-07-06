@@ -1,7 +1,9 @@
 package com.fushu.mmceoneblock.common.container;
 
 import com.fushu.mmceoneblock.common.network.GuiHandler;
+import hellfirepvp.modularmachinery.common.item.ItemBlueprint;
 import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
+import net.minecraft.item.Item;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -22,6 +24,27 @@ public final class ContainerSingleBlockControllerTest {
             ContainerSingleBlockController.controllerSlotStart()
         );
         assertEquals(37, ContainerSingleBlockController.firstInternalSlotIndex());
+    }
+
+    @Test
+    public void blueprintSlotIsPinnedBeforeInternalSlots() {
+        int slotCount = ContainerSingleBlockController.firstInternalSlotIndex() + 3;
+
+        assertEquals(36, ContainerSingleBlockController.blueprintSlotIndex());
+        assertEquals(ContainerSingleBlockController.blueprintSlotIndex(), ContainerSingleBlockController.controllerSlotStart());
+        assertTrue(ContainerSingleBlockController.isBlueprintSlotIndex(ContainerSingleBlockController.blueprintSlotIndex()));
+        assertFalse(ContainerSingleBlockController.isBlueprintSlotIndex(ContainerSingleBlockController.blueprintSlotIndex() - 1));
+        assertFalse(ContainerSingleBlockController.isBlueprintSlotIndex(ContainerSingleBlockController.firstInternalSlotIndex()));
+        assertFalse(ContainerSingleBlockController.isInternalSlotIndex(ContainerSingleBlockController.blueprintSlotIndex(), slotCount));
+        assertTrue(ContainerSingleBlockController.isInternalSlotIndex(ContainerSingleBlockController.firstInternalSlotIndex(), slotCount));
+        assertTrue(ContainerSingleBlockController.isInternalSlotIndex(slotCount - 1, slotCount));
+        assertFalse(ContainerSingleBlockController.isInternalSlotIndex(slotCount, slotCount));
+    }
+
+    @Test
+    public void internalSlotsRejectBlueprintStacks() {
+        assertFalse(ContainerSingleBlockController.isInternalItemValid(new ItemBlueprint()));
+        assertTrue(ContainerSingleBlockController.isInternalItemValid(new Item()));
     }
 
     @Test

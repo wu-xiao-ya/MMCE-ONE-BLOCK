@@ -6,6 +6,7 @@ import hellfirepvp.modularmachinery.common.tiles.TileMachineController;
 import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Slot;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.SlotItemHandler;
@@ -80,11 +81,31 @@ public class ContainerSingleBlockController extends ContainerController {
     }
 
     static int controllerSlotStart() {
+        return blueprintSlotIndex();
+    }
+
+    static int blueprintSlotIndex() {
         return PLAYER_SLOT_COUNT + TileMultiblockMachineController.BLUEPRINT_SLOT;
     }
 
     static int firstInternalSlotIndex() {
-        return controllerSlotStart() + 1;
+        return blueprintSlotIndex() + 1;
+    }
+
+    static boolean isBlueprintSlotIndex(int index) {
+        return index == blueprintSlotIndex();
+    }
+
+    static boolean isInternalSlotIndex(int index, int slotCount) {
+        return index >= firstInternalSlotIndex() && index < slotCount;
+    }
+
+    static boolean isInternalItemValid(@Nonnull ItemStack stack) {
+        return isInternalItemValid(stack.getItem());
+    }
+
+    static boolean isInternalItemValid(@Nonnull Item item) {
+        return !(item instanceof ItemBlueprint);
     }
 
     static int internalSlotX(int offset) {
@@ -100,12 +121,11 @@ public class ContainerSingleBlockController extends ContainerController {
             return MergeRange.none();
         }
         if (index < PLAYER_SLOT_COUNT) {
-            int controllerStart = controllerSlotStart();
             if (blueprint) {
-                return new MergeRange(controllerStart, controllerStart + 1, false);
+                return new MergeRange(blueprintSlotIndex(), firstInternalSlotIndex(), false);
             }
-            return slotCount > controllerStart + 1
-                ? new MergeRange(controllerStart + 1, slotCount, false)
+            return isInternalSlotIndex(firstInternalSlotIndex(), slotCount)
+                ? new MergeRange(firstInternalSlotIndex(), slotCount, false)
                 : MergeRange.none();
         }
         return new MergeRange(0, PLAYER_SLOT_COUNT, false);
@@ -150,7 +170,7 @@ public class ContainerSingleBlockController extends ContainerController {
 
         @Override
         public boolean isItemValid(@Nonnull ItemStack stack) {
-            return !(stack.getItem() instanceof ItemBlueprint) && super.isItemValid(stack);
+            return isInternalItemValid(stack) && super.isItemValid(stack);
         }
     }
 }
