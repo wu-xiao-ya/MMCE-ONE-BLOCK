@@ -1,0 +1,215 @@
+name: Build and validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      mmcege_repo:
+        description: MMCEGE repository slug
+        required: false
+        default: wu-xiao-ya/Modular-Machinery-Community-Edition-Gui-Edit
+      mmcege_ref:
+        description: Preferred MMCEGE ref
+        required: false
+        default: feature/one-block-downstream-api
+      mmce_repo:
+        description: Modular Machinery CE repository slug used only for the Gradle wrapper/reference checkout
+        required: false
+        default: NovaEngineering-Source/ModularMachinery-Community-Edition
+      mmce_ref:
+        description: Modular Machinery CE ref used only for the Gradle wrapper/reference checkout
+        required: false
+        default: master
+      run_smoke:
+        description: Run the server smoke fixture after build
+        required: false
+        default: 'true'
+
+jobs:
+  build-and-validate:
+    name: Build MMCEGE first, then validate one block
+    runs-on: ubuntu-latest
+    env:
+      MODULAR_MACHINERY_CURSE: curse.maven:modular-machinery-community-edition-817377:7372953
+      MMCEGE_MAVEN: com.fushu.mmce:MMCEGE:1.2.0
+      RUN_SMOKE: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.run_smoke == 'true' }}
+
+    steps:
+      - name: Detect MMCEGE API branch
+        id: mmcege_ref
+        shell: bash
+        run: |
+          repo="${{ github.event.inputs.mmcege_repo || 'wu-xiao-ya/Modular-Machinery-Community-Edition-Gui-Edit' }}"
+          preferred="${{ github.event.inputs.mmcege_ref || 'feature/one-block-downstream-api' }}"
+          if git ls-remote --heads "https://github.com/${repo}.git" "${preferred}" | grep -q "${preferred}"; then
+            echo "ref=${preferred}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect MMCE wrapper branch
+        id: mmce_ref
+        shell: bash
+        run: |
+          repo="${{ github.event.inputs.mmce_repo || 'NovaEngineering-Source/ModularMachinery-Community-Edition' }}"
+          preferred="${{ github.event.inputs.mmce_ref || 'master' }}"
+          if git ls-remote --heads "https://github.com/${repo}.git" "${preferred}" | grep -q "${preferred}"; then
+            echo "ref=${preferred}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=master" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout MMCEGE
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.mmcege_repo || 'wu-xiao-ya/Modular-Machinery-Community-Edition-Gui-Edit' }}
+          ref: ${{ steps.mmcege_ref.outputs.ref }}
+          path: mmcege
+          fetch-depth: 1
+
+      - name: Checkout MMCE wrapper/reference
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.mmce_repo || 'NovaEngineering-Source/ModularMachinery-Community-Edition' }}
+          ref: ${{ steps.mmce_ref.outputs.ref }}
+          path: mmce-src
+          fetch-depth: 1
+
+      - name: Record dependency revisions
+        shell: bash
+        run: |
+          {
+            echo "### Dependency revisions"
+            echo
+            echo "| Component | Ref | SHA |"
+            echo "| --- | --- | --- |"
+            echo "| MMCEGE | \`${{ steps.mmcege_ref.outputs.ref }}\` | \`$(git -C mmcege rev-parse HEAD)\` |"
+            echo "| MMCE wrapper/reference | \`${{ steps.mmce_ref.outputs.ref }}\` | \`$(git -C mmce-src rev-parse HEAD)\` |"
+            echo "| MMCE One Block | \`${{ github.ref_name }}\` | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Build and publish MMCEGE to the local Maven cache
+        shell: bash
+        working-directory: mmce-src
+        run: |
+          chmod +x gradlew
+          ./gradlew -p ../mmcege --no-daemon --no-parallel --console=plain test jar publishToMavenLocal --stacktrace
+
+      - name: Checkout MMCE One Block
+        uses: actions/checkout@v4
+        with:
+          path: mmce-one-block
+          fetch-depth: 1
+
+      - name: Validate example JSON
+        shell: bash
+        working-directory: mmce-one-block
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("examples/one-block-machine.json").read_text(encoding="utf-8"))
+          assert data["id"] == "starter_controller"
+          assert data["machine"] == "starter_machine"
+          assert data["guiStyle"] == "mmceoneblock:starter_controller"
+          assert data["block"]["model"] == "mmceoneblock:single_block_machine_controller"
+          assert data["block"]["texture"] == "mmceoneblock:blocks/starter_controller"
+          assert data["enabled"] is True
+          assert len(data["components"]) >= 5
+          assert {component["type"] for component in data["components"]} >= {
+              "item_input", "fluid_input", "gas_input", "energy_input", "item_output"
+          }
+          PY
+
+      - name: Validate client cfg sample
+        shell: bash
+        working-directory: mmce-one-block
+        run: |
+          grep -q 'B:enabled=true' examples/client.cfg.sample
+          grep -q 'S:smartInterfaceEditorVirtualKey=energy_target,fluid_target' examples/client.cfg.sample
+          grep -q 'S:specialThreadBackgroundColor=FF7DD3FC' examples/client.cfg.sample
+
+      - name: Check test sources are real JUnit tests
+        shell: bash
+        working-directory: mmce-one-block
+        run: |
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/config/OneBlockMachineConfigParserTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/api/MMCEGEApiBridgeTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/examples/OneBlockExampleFixtureTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/config/MachineConfigLoaderDirectoryTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/container/ContainerSingleBlockControllerTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/registry/MachineRegistryValidationTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/tile/TileSingleBlockMachineControllerPayloadTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/tile/TileSingleBlockMachineControllerTest.java
+
+      - name: Build MMCE One Block
+        shell: bash
+        working-directory: mmce-src
+        run: |
+          chmod +x gradlew
+          ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain -PmodularMachineryCurse="$MODULAR_MACHINERY_CURSE" -PmmceGuiExtMaven="$MMCEGE_MAVEN" build --stacktrace
+
+      - name: Prepare smoke fixture
+        if: ${{ env.RUN_SMOKE == 'true' }}
+        shell: bash
+        working-directory: mmce-one-block
+        run: |
+          mkdir -p run/config
+          cp -R examples/smoke/config/. run/config/
+          echo "eula=true" > run/eula.txt
+
+      - name: Run server smoke fixture
+        if: ${{ env.RUN_SMOKE == 'true' }}
+        shell: bash
+        working-directory: mmce-src
+        run: |
+          set +e
+          timeout 240s ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain -PmmceOneBlockDevValidation=true runServer --stacktrace
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi
+          log="../mmce-one-block/run/logs/latest.log"
+          grep -q "Loaded 1 one-block machine definition(s)" "$log"
+          grep -q "Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)" "$log"
+          grep -q "Machines: \\[1 loaded, 0 failed\\]" "$log"
+          grep -q "modularmachinery:starter_machine (Recipes): \\[1 loaded, 0 failed\\]" "$log"
+          grep -q "Forge Mod Loader has successfully loaded" "$log"
+          grep -q "Done (" "$log"
+          grep -q "\\[MMCE One Block DevValidation\\] PASS id=starter_controller" "$log"
+          grep -q "formed=true" "$log"
+          grep -q "recipeFinished=true" "$log"
+          grep -q "nbtPayload=true" "$log"
+          grep -q "comparatorAfterFormed=1" "$log"
+          if grep -q "Skipping one-block machine" "$log"; then
+            exit 1
+          fi
+          if grep -q "\\[MMCE One Block DevValidation\\] FAIL" "$log"; then
+            exit 1
+          fi
+
+      - name: Upload smoke logs
+        if: ${{ always() && env.RUN_SMOKE == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmce-one-block-smoke-logs-${{ github.sha }}
+          path: |
+            mmce-one-block/run/logs
+            mmce-one-block/run/crash-reports
+          if-no-files-found: ignore
+
+      - name: Upload MMCE One Block artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmce-one-block-${{ github.sha }}
+          path: mmce-one-block/build/libs

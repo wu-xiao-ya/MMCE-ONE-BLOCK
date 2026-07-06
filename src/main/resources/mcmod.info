@@ -1,0 +1,19 @@
+[
+  {
+    "modid": "mmceoneblock",
+    "name": "MMCE One Block",
+    "description": "Single-block machine addon for Modular Machinery Community Edition.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "",
+    "updateUrl": "",
+    "authorList": ["fushu"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": [
+      "modularmachinery",
+      "mmceguiext"
+    ]
+  }
+]

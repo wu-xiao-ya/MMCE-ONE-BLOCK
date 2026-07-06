@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "normal": { "model": "mmceoneblock:single_block_machine_controller" }
+  }
+}

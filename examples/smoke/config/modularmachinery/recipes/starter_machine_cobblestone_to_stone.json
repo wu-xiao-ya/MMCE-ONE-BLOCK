@@ -1,0 +1,19 @@
+{
+  "machine": "starter_machine",
+  "registryName": "starter_machine_cobblestone_to_stone",
+  "recipeTime": 20,
+  "requirements": [
+    {
+      "type": "modularmachinery:item",
+      "io-type": "input",
+      "item": "minecraft:cobblestone",
+      "amount": 1
+    },
+    {
+      "type": "modularmachinery:item",
+      "io-type": "output",
+      "item": "minecraft:stone",
+      "amount": 1
+    }
+  ]
+}

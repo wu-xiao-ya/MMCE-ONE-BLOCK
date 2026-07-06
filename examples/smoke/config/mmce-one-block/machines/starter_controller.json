@@ -1,0 +1,25 @@
+{
+  "id": "starter_controller",
+  "machine": "starter_machine",
+  "enabled": true,
+  "displayName": "MMCE One Block Starter Controller",
+  "block": {
+    "model": "mmceoneblock:single_block_machine_controller",
+    "texture": "mmceoneblock:blocks/starter_controller"
+  },
+  "components": [
+    {
+      "type": "item_input",
+      "id": "items_in",
+      "displayName": "Item Input",
+      "slots": 9
+    },
+    {
+      "type": "item_output",
+      "id": "items_out",
+      "displayName": "Item Output",
+      "slots": 9
+    }
+  ],
+  "guiStyle": "mmceoneblock:starter_controller"
+}

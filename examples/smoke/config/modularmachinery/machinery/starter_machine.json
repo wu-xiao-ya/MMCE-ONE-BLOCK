@@ -1,0 +1,12 @@
+{
+  "registryname": "starter_machine",
+  "localizedname": "MMCE One Block Smoke Machine",
+  "parts": [
+    {
+      "x": 0,
+      "y": -1,
+      "z": 0,
+      "elements": "minecraft:stone"
+    }
+  ]
+}

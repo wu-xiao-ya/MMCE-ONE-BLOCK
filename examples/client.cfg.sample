@@ -1,0 +1,52 @@
+# Configuration file
+
+general {
+    B:enabled=true
+    I:wheelStep=10
+
+    machinecontroller {
+        S:backgroundTexture=mmceoneblock:textures/gui/starter_machine.png
+        I:backgroundTextureWidth=176
+        I:backgroundTextureHeight=213
+        I:backgroundTextureOffsetX=0
+        I:backgroundTextureOffsetY=0
+        I:guiWidth=320
+        I:guiHeight=213
+        B:hideDefaultBackground=false
+        B:useNineSlice=true
+        S:customPanels <
+            main,182,8,126,92
+            log,182,104,126,68
+         >
+        S:defaultPanelId=main
+        B:enableSmartInterfaceEditor=true
+        I:smartInterfaceEditorInputWidth=70
+        S:smartInterfaceEditorVirtualKey=energy_target,fluid_target
+    }
+
+    factorycontroller {
+        S:backgroundTexture=mmceoneblock:textures/gui/starter_factory.png
+        I:backgroundTextureWidth=280
+        I:backgroundTextureHeight=213
+        I:backgroundTextureOffsetX=0
+        I:backgroundTextureOffsetY=0
+        I:guiWidth=420
+        I:guiHeight=230
+        B:hideDefaultBackground=false
+        B:useNineSlice=true
+        S:customPanels <
+            main,286,8,118,92
+            log,286,104,118,68
+         >
+        S:defaultPanelId=main
+        B:enableSmartInterfaceEditor=true
+        I:smartInterfaceEditorInputWidth=70
+        S:smartInterfaceEditorVirtualKey=factory_target
+        S:specialThreadBackgroundColor=FF7DD3FC
+        I:threadQueueX=12
+        I:threadQueueY=14
+        I:threadVisibleRows=6
+        I:threadRowWidth=90
+        I:threadRowHeight=34
+    }
+}
