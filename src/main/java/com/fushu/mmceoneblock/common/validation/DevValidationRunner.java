@@ -10,12 +10,14 @@ import hellfirepvp.modularmachinery.common.util.IEnergyHandlerAsync;
 import hellfirepvp.modularmachinery.common.util.IOInventory;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockLever;
+import net.minecraft.entity.item.EntityItem;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
@@ -26,6 +28,7 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 import java.util.Collection;
+import java.util.List;
 
 public final class DevValidationRunner {
     private static final String ENABLE_PROPERTY = "mmceoneblock.devValidation";
@@ -371,8 +374,61 @@ public final class DevValidationRunner {
             this.state.inventoryPersisted,
             this.state.energyPersisted
         );
-        cleanup(world);
+        if (!validateDestroyDrop(world)) {
+            return;
+        }
         pass();
+    }
+
+    private boolean validateDestroyDrop(WorldServer world) {
+        TileEntity tile = world.getTileEntity(this.state.pos);
+        if (!(tile instanceof TileSingleBlockMachineController)) {
+            fail("drop_tile_missing_before_destroy");
+            return false;
+        }
+
+        Block block = world.getBlockState(this.state.pos).getBlock();
+        if (!(block instanceof BlockSingleBlockMachineController)) {
+            fail("drop_wrong_block_before_destroy:" + block.getRegistryName());
+            return false;
+        }
+
+        MachineRegistry.MachineEntry entry = MachineRegistry.snapshot().get(TARGET_ID);
+        if (entry == null) {
+            fail("drop_missing_machine_entry:" + TARGET_ID);
+            return false;
+        }
+
+        int before = countControllerDrops(world, entry);
+        if (!world.destroyBlock(this.state.pos, true)) {
+            fail("destroy_block_returned_false");
+            return false;
+        }
+
+        int after = countControllerDrops(world, entry);
+        if (after <= before) {
+            fail("controller_drop_missing:" + before + "->" + after);
+            return false;
+        }
+        if (!world.isAirBlock(this.state.pos)) {
+            fail("block_not_air_after_destroy:" + world.getBlockState(this.state.pos).getBlock().getRegistryName());
+            return false;
+        }
+        if (world.getTileEntity(this.state.pos) != null) {
+            fail("tile_not_cleared_after_destroy");
+            return false;
+        }
+
+        this.state.blockDropped = true;
+        this.state.tileCleared = true;
+        cleanupDropEntities(world);
+        MMCEOneBlock.log.info(
+            "[MMCE One Block DevValidation] destroy drop verified id={} blockDropped={} tileCleared={}",
+            TARGET_ID,
+            this.state.blockDropped,
+            this.state.tileCleared
+        );
+        return true;
     }
 
     private boolean requestChunkUnload(ChunkProviderServer provider) {
@@ -404,6 +460,32 @@ public final class DevValidationRunner {
         return null;
     }
 
+    private int countControllerDrops(WorldServer world, MachineRegistry.MachineEntry entry) {
+        int count = 0;
+        for (EntityItem entity : findNearbyDrops(world)) {
+            ItemStack stack = entity.getItem();
+            if (!entity.isDead && !stack.isEmpty() && stack.getItem() == entry.getItem()) {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    private void cleanupDropEntities(WorldServer world) {
+        for (EntityItem entity : findNearbyDrops(world)) {
+            entity.setDead();
+        }
+    }
+
+    private List<EntityItem> findNearbyDrops(WorldServer world) {
+        double x = this.state.pos.getX();
+        double y = this.state.pos.getY();
+        double z = this.state.pos.getZ();
+        AxisAlignedBB box = new AxisAlignedBB(x - 2.0D, y - 2.0D, z - 2.0D, x + 3.0D, y + 3.0D, z + 3.0D);
+        return world.getEntitiesWithinAABB(EntityItem.class, box);
+    }
+
+    @SuppressWarnings("unused")
     private void cleanup(WorldServer world) {
         if (this.state.pos != null) {
             clearRedstonePause(world, this.state.pos);
@@ -420,7 +502,7 @@ public final class DevValidationRunner {
     private void pass() {
         this.state.done = true;
         MMCEOneBlock.log.info(
-            "[MMCE One Block DevValidation] PASS id={} formed={} redstonePaused={} outputBlocked={} outputRecovered={} recipeFinished={} nbtPayload={} chunkReloaded={} inventoryPersisted={} energyPersisted={} comparatorAfterFormed={}",
+            "[MMCE One Block DevValidation] PASS id={} formed={} redstonePaused={} outputBlocked={} outputRecovered={} recipeFinished={} nbtPayload={} chunkReloaded={} inventoryPersisted={} energyPersisted={} comparatorAfterFormed={} blockDropped={} tileCleared={}",
             TARGET_ID,
             this.state.formed,
             this.state.redstonePaused,
@@ -431,7 +513,15 @@ public final class DevValidationRunner {
             this.state.chunkReloaded,
             this.state.inventoryPersisted,
             this.state.energyPersisted,
-            this.state.comparatorAfterFormed
+            this.state.comparatorAfterFormed,
+            this.state.blockDropped,
+            this.state.tileCleared
+        );
+        MMCEOneBlock.log.info(
+            "[MMCE One Block DevValidation] PASS_DROP id={} blockDropped={} tileCleared={}",
+            TARGET_ID,
+            this.state.blockDropped,
+            this.state.tileCleared
         );
     }
 
@@ -461,6 +551,8 @@ public final class DevValidationRunner {
         private boolean inventoryPersisted = false;
         private boolean energySeeded = false;
         private boolean energyPersisted = false;
+        private boolean blockDropped = false;
+        private boolean tileCleared = false;
         private boolean done = false;
         private int comparatorAfterFormed = 0;
         private long expectedEnergy = 0L;

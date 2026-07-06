@@ -202,6 +202,9 @@ jobs:
           grep -q "inventoryPersisted=true" "$log"
           grep -q "energyPersisted=true" "$log"
           grep -q "comparatorAfterFormed=1" "$log"
+          grep -q "destroy drop verified id=starter_controller" "$log"
+          grep -q "blockDropped=true" "$log"
+          grep -q "tileCleared=true" "$log"
           if grep -q "Skipping one-block machine" "$log"; then
             exit 1
           fi

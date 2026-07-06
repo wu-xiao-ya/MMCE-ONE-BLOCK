@@ -25,6 +25,7 @@ $required = @(
     '[MMCE One Block DevValidation] saved and queued chunk reload check',
     '[MMCE One Block DevValidation] chunk unloaded',
     '[MMCE One Block DevValidation] chunk reload persisted id=starter_controller',
+    '[MMCE One Block DevValidation] destroy drop verified id=starter_controller',
     '[MMCE One Block DevValidation] PASS id=starter_controller',
     'formed=true',
     'redstonePaused=true',
@@ -35,7 +36,9 @@ $required = @(
     'chunkReloaded=true',
     'inventoryPersisted=true',
     'energyPersisted=true',
-    'comparatorAfterFormed=1'
+    'comparatorAfterFormed=1',
+    'blockDropped=true',
+    'tileCleared=true'
 )
 
 foreach ($needle in $required) {

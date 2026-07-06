@@ -34,6 +34,9 @@ try {
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $logPath) {
             $log = Get-Content -LiteralPath $logPath -Raw
+            if ($null -eq $log) {
+                $log = ''
+            }
             if ($log.Contains('[MMCE One Block DevValidation] FAIL')) {
                 $finished = $true
                 $failed = $true
