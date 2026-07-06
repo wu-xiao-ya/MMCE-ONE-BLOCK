@@ -7,13 +7,17 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public final class OneBlockExampleFixtureTest {
@@ -77,6 +81,44 @@ public final class OneBlockExampleFixtureTest {
         assertTrue(style.getAsJsonObject("mmce_gui_ext").has("machineController"));
     }
 
+    @Test
+    public void smokeStyleFixtureParsesWithMmcegeGuiFeatures() throws Exception {
+        Path styleFile = Paths.get("examples", "smoke", "config", "mmceguiext", "styles", "starter_controller.json");
+        Object result = parseMmcegeMachineJson(styleFile.toString(), read(styleFile));
+
+        assertEquals("mmceoneblock:starter_controller", field(result, "namespacedKey"));
+        assertTrue(listField(result, "warnings").isEmpty());
+
+        Object machineStyle = field(result, "machineStyle");
+        assertNotNull(machineStyle);
+        assertEquals(Integer.valueOf(240), field(machineStyle, "guiWidth"));
+        assertEquals(Integer.valueOf(213), field(machineStyle, "guiHeight"));
+
+        List<?> texts = listField(machineStyle, "texts");
+        assertEquals(1, texts.size());
+        assertEquals("smoke_title", field(texts.get(0), "id"));
+        assertEquals("One Block Smoke", field(texts.get(0), "value"));
+
+        List<?> buttons = listField(machineStyle, "buttons");
+        assertEquals(1, buttons.size());
+        assertEquals("smoke_cycle", field(buttons.get(0), "id"));
+        assertEquals("event", field(buttons.get(0), "action"));
+        assertEquals("smoke_pulse", field(buttons.get(0), "buttonId"));
+
+        List<?> progressBars = listField(machineStyle, "progressBars");
+        assertEquals(1, progressBars.size());
+        assertEquals("smoke_progress", field(progressBars.get(0), "id"));
+        assertEquals("left_to_right", field(progressBars.get(0), "direction"));
+        assertEquals("machine_progress", field(progressBars.get(0), "source"));
+
+        List<?> dynamicVisuals = listField(machineStyle, "dynamicVisuals");
+        assertEquals(1, dynamicVisuals.size());
+        assertEquals("smoke_progress_fill", field(dynamicVisuals.get(0), "id"));
+        assertEquals("recipeProgress", field(field(dynamicVisuals.get(0), "source"), "metric"));
+        assertEquals("fill", field(field(dynamicVisuals.get(0), "renderer"), "type"));
+        assertEquals("right", field(field(dynamicVisuals.get(0), "renderer"), "direction"));
+    }
+
     private static String read(Path file) throws IOException {
         return new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
     }
@@ -86,5 +128,27 @@ public final class OneBlockExampleFixtureTest {
             reader.setLenient(false);
             return new JsonParser().parse(reader).getAsJsonObject();
         }
+    }
+
+    private static Object parseMmcegeMachineJson(String sourceName, String content) throws Exception {
+        Class<?> parser = Thread.currentThread()
+            .getContextClassLoader()
+            .loadClass("com.fushu.mmceguiext.client.config.MachineGuiStyleParser");
+        Method parse = parser.getDeclaredMethod("parseMachineJson", String.class, String.class);
+        parse.setAccessible(true);
+        return parse.invoke(null, sourceName, content);
+    }
+
+    private static Object field(Object target, String name) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<?> listField(Object target, String name) throws Exception {
+        List<?> value = (List<?>) field(target, name);
+        assertNotNull(value);
+        return value;
     }
 }

@@ -58,10 +58,10 @@ The downstream API note for MMCEGE is documented in:
 
 - `examples/one-block-machine.json` - valid `config/mmce-one-block/machines/` addon definition
 - `examples/client.cfg.sample` - Forge-style sample config for the MMCEGE client config
-- `examples/smoke/` - minimal backing MMCE machine, recipe, one-block config, and standalone MMCEGE style for runtime smoke
+- `examples/smoke/` - minimal backing MMCE machine, recipe, one-block config, and standalone MMCEGE controller style for runtime smoke
 
 The optional `guiStyle` field is a MMCEGE machine-controller style key. MMCE One Block exposes it to MMCEGE at GUI runtime, so `mmceoneblock:<id>` can have a style independent from the backing MMCE machine id.
-Standalone style JSON belongs under `config/mmceguiext/styles/` and uses the usual `registryname` plus `mmce_gui_ext.machineController` shape.
+Standalone style JSON belongs under `config/mmceguiext/styles/` and uses the usual `registryname` plus `mmce_gui_ext.machineController` shape. The smoke style intentionally includes text, button, progress bar, and dynamic visual entries so parser coverage exercises the same feature families a pack-facing one-block controller is expected to use.
 
 ## Runtime smoke
 
@@ -87,7 +87,7 @@ For a stronger local server-side integration pass, run the dev validation smoke.
 
 In GitHub Actions, push and pull-request runs launch the same fixture, assert the server log, and run a headless client launch smoke by default. Manual workflow runs can set `run_smoke=false` or `run_client_smoke=false` when a fast compile-only check is needed.
 
-The server smoke proves mod loading, backing machine loading, recipe loading, and one-block definition validation. The dev validation smoke additionally proves real server-world placement, structure formation, redstone pause behavior, blocked-output retry, recipe completion, addon NBT payload, chunk unload/reload persistence for inventory and energy payload, comparator formed output, and real destroy/drop cleanup for the smoke fixture. The client launch smoke proves the client can load the addon, MMCEGE, and the standalone style fixture locally and in CI. Unit tests cover the single-block shift-click routing rules and addon-owned NBT payload, but these checks still do not prove real GUI opening or real mouse click handling; those need a client/in-game verification pass.
+The server smoke proves mod loading, backing machine loading, recipe loading, and one-block definition validation. The dev validation smoke additionally proves real server-world placement, structure formation, redstone pause behavior, blocked-output retry, recipe completion, addon NBT payload, chunk unload/reload persistence for inventory and energy payload, comparator formed output, and real destroy/drop cleanup for the smoke fixture. The client launch smoke proves the client can load the addon, MMCEGE, and the standalone style fixture locally and in CI. Unit tests cover the single-block shift-click routing rules, addon-owned NBT payload, MMCEGE GUI bridge contract, and MMCEGE parsing of the smoke text/button/progress/dynamic-visual style. These checks still do not prove real GUI opening, real mouse click handling, or visual rendering on screen; those need a client/in-game verification pass.
 
 ## Test coverage
 

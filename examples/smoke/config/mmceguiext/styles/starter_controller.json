@@ -14,6 +14,59 @@
           "color": "FFFFFF",
           "shadow": true
         }
+      ],
+      "buttons": [
+        {
+          "id": "smoke_cycle",
+          "x": 184,
+          "y": 8,
+          "width": 44,
+          "height": 16,
+          "label": "Pulse",
+          "action": "event",
+          "buttonId": "smoke_pulse",
+          "textColor": "FFFFFFFF",
+          "hoverTextColor": "FF7DD3FC"
+        }
+      ],
+      "progressBars": [
+        {
+          "id": "smoke_progress",
+          "x": 8,
+          "y": 104,
+          "width": 120,
+          "height": 8,
+          "backgroundColor": "33000000",
+          "fillColor": "FF7DD3FC",
+          "borderColor": "FFFFFFFF",
+          "direction": "left_to_right",
+          "source": "machine_progress",
+          "showText": true,
+          "textColor": "FFFFFFFF"
+        }
+      ],
+      "dynamicVisuals": [
+        {
+          "id": "smoke_progress_fill",
+          "x": 8,
+          "y": 118,
+          "width": 120,
+          "height": 8,
+          "source": {
+            "type": "machine",
+            "metric": "recipeProgress",
+            "min": 0.0,
+            "max": 1.0,
+            "clamp": true
+          },
+          "renderer": {
+            "type": "fill",
+            "direction": "right",
+            "backgroundColor": "33000000",
+            "fillColor": "FFB4E197",
+            "borderColor": "FFFFFFFF"
+          }
+        }
       ]
     }
   }

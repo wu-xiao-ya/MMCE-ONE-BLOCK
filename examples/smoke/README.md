@@ -40,7 +40,7 @@ The fixture includes:
 - `config/modularmachinery/machinery/starter_machine.json` - a tiny backing MMCE machine so MMCE One Block can resolve `machine: starter_machine`.
 - `config/modularmachinery/recipes/starter_machine_cobblestone_to_stone.json` - a one-input, one-output recipe for smoke testing.
 - `config/mmce-one-block/machines/starter_controller.json` - the single-block controller definition.
-- `config/mmceguiext/styles/starter_controller.json` - standalone MMCEGE style keyed by `mmceoneblock:starter_controller`.
+- `config/mmceguiext/styles/starter_controller.json` - standalone MMCEGE style keyed by `mmceoneblock:starter_controller`, with text, button, progress bar, and dynamic visual entries.
 
 The style file is intentionally outside `config/modularmachinery/machinery/` so
 packs do not need to edit the backing MMCE machine JSON just to style a
@@ -50,7 +50,9 @@ This smoke fixture is a launch-level gate. It proves that Forge loads the addon,
 MMCE loads the backing machine and recipe, and MMCE One Block validates the
 single-block definition against MMCE. The client launch smoke additionally proves
 that the client can load the addon and standalone MMCEGE style fixture without a
-missing blockstate for the smoke backing controller. The dev validation smoke
+missing blockstate for the smoke backing controller. Unit tests parse the style
+fixture through MMCEGE's machine-style parser so the text, button, progress bar,
+and dynamic visual entries cannot silently drift out of schema. The dev validation smoke
 proves real server-side placement, structure formation, recipe execution, addon
 NBT payload, chunk reload persistence, comparator formed output, and real
 destroy/drop cleanup for this fixture. It does not prove real GUI opening,
