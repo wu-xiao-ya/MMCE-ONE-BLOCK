@@ -271,6 +271,12 @@ jobs:
           if grep -q "Caught exception from MMCE One Block" "$log"; then
             exit 1
           fi
+          if grep -q "Exception loading model for variant modularmachinery:starter_machine_controller" "$log"; then
+            exit 1
+          fi
+          if grep -q "FileNotFoundException: modularmachinery:blockstates/starter_machine_controller.json" "$log"; then
+            exit 1
+          fi
           if grep -q "A fatal error has occurred" "$log"; then
             exit 1
           fi
