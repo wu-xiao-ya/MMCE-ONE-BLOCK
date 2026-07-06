@@ -85,9 +85,9 @@ For a stronger local server-side integration pass, run the dev validation smoke.
 .\scripts\run-dev-validation-smoke.ps1
 ```
 
-In GitHub Actions, push and pull-request runs launch the same fixture and assert the server log by default. Manual workflow runs can set `run_smoke=false` only when a fast compile-only check is needed.
+In GitHub Actions, push and pull-request runs launch the same fixture, assert the server log, and run a headless client launch smoke by default. Manual workflow runs can set `run_smoke=false` or `run_client_smoke=false` when a fast compile-only check is needed.
 
-The server smoke proves mod loading, backing machine loading, recipe loading, and one-block definition validation. The dev validation smoke additionally proves real server-world placement, structure formation, recipe completion, addon NBT payload, and comparator formed output for the smoke fixture. The client launch smoke proves the client can load the addon, MMCEGE, and the standalone style fixture. Unit tests cover the single-block shift-click routing rules and addon-owned NBT payload, but these checks still do not prove real GUI opening, real mouse click handling, or chunk/world reload persistence; those need a client/in-game verification pass.
+The server smoke proves mod loading, backing machine loading, recipe loading, and one-block definition validation. The dev validation smoke additionally proves real server-world placement, structure formation, recipe completion, addon NBT payload, and comparator formed output for the smoke fixture. The client launch smoke proves the client can load the addon, MMCEGE, and the standalone style fixture locally and in CI. Unit tests cover the single-block shift-click routing rules and addon-owned NBT payload, but these checks still do not prove real GUI opening, real mouse click handling, or chunk/world reload persistence; those need a client/in-game verification pass.
 
 ## Test coverage
 

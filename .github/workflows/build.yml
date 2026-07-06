@@ -25,6 +25,10 @@ on:
         description: Run the server smoke fixture after build
         required: false
         default: 'true'
+      run_client_smoke:
+        description: Run the client launch smoke fixture after build
+        required: false
+        default: 'true'
 
 jobs:
   build-and-validate:
@@ -34,6 +38,7 @@ jobs:
       MODULAR_MACHINERY_CURSE: curse.maven:modular-machinery-community-edition-817377:7372953
       MMCEGE_MAVEN: com.fushu.mmce:MMCEGE:1.2.0
       RUN_SMOKE: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.run_smoke == 'true' }}
+      RUN_CLIENT_SMOKE: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.run_client_smoke == 'true' }}
 
     steps:
       - name: Detect MMCEGE API branch
@@ -197,9 +202,75 @@ jobs:
           if grep -q "\\[MMCE One Block DevValidation\\] FAIL" "$log"; then
             exit 1
           fi
+          cp "$log" "../mmce-one-block/run/logs/server-smoke-latest.log"
+
+      - name: Run client launch smoke fixture
+        if: ${{ env.RUN_CLIENT_SMOKE == 'true' }}
+        shell: bash
+        working-directory: mmce-src
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+          mkdir -p ../mmce-one-block/run/logs
+          rm -f ../mmce-one-block/run/logs/latest.log
+          set +e
+          setsid xvfb-run -a ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain runClient --stacktrace &
+          client_pid=$!
+          loaded=0
+          deadline=$((SECONDS + 180))
+          log="../mmce-one-block/run/logs/latest.log"
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if ! kill -0 "$client_pid" >/dev/null 2>&1; then
+              break
+            fi
+            if [ -f "$log" ] \
+              && grep -q "LWJGL Version" "$log" \
+              && grep -q "MinecraftForge v" "$log" \
+              && grep -q "Loaded 1 one-block machine definition(s)" "$log" \
+              && grep -q "Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)" "$log" \
+              && grep -q "Forge Mod Loader has successfully loaded" "$log" \
+              && grep -q "mmceoneblock" "$log" \
+              && grep -q "mmceguiext" "$log"; then
+              loaded=1
+              break
+            fi
+            sleep 2
+          done
+          if kill -0 "$client_pid" >/dev/null 2>&1; then
+            kill -- "-$client_pid" >/dev/null 2>&1 || kill "$client_pid" >/dev/null 2>&1 || true
+          fi
+          wait "$client_pid" >/dev/null 2>&1
+          status=$?
+          set -e
+          if [ "$loaded" -ne 1 ]; then
+            if [ -f "$log" ]; then
+              tail -n 200 "$log"
+            fi
+            if [ "$status" -eq 0 ]; then
+              exit 1
+            fi
+            exit "$status"
+          fi
+          if grep -q "Skipping one-block machine" "$log"; then
+            exit 1
+          fi
+          if grep -q "Caught exception from MMCE One Block" "$log"; then
+            exit 1
+          fi
+          if grep -q "A fatal error has occurred" "$log"; then
+            exit 1
+          fi
+          if grep -q "Crash report saved to" "$log"; then
+            exit 1
+          fi
+          cp "$log" "../mmce-one-block/run/logs/client-smoke-latest.log"
 
       - name: Upload smoke logs
-        if: ${{ always() && env.RUN_SMOKE == 'true' }}
+        if: ${{ always() && (env.RUN_SMOKE == 'true' || env.RUN_CLIENT_SMOKE == 'true') }}
         uses: actions/upload-artifact@v4
         with:
           name: mmce-one-block-smoke-logs-${{ github.sha }}
