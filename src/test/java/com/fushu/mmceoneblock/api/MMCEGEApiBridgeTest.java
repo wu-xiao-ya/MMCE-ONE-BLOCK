@@ -7,6 +7,7 @@ import java.util.Collection;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public final class MMCEGEApiBridgeTest {
     @Test
@@ -54,5 +55,16 @@ public final class MMCEGEApiBridgeTest {
             .loadClass("com.fushu.mmceguiext.api.gui.IMachineGuiStyleProvider");
 
         assertNotNull(provider.getMethod("getMachineControllerGuiStyle"));
+    }
+
+    @Test
+    public void exposesResizableControllerGuiConstructorForSingleBlockBridge() throws Exception {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        Class<?> gui = loader.loadClass("com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable");
+        Class<?> guiScreen = loader.loadClass("net.minecraft.client.gui.GuiScreen");
+        Class<?> container = loader.loadClass("hellfirepvp.modularmachinery.common.container.ContainerController");
+
+        assertTrue(guiScreen.isAssignableFrom(gui));
+        assertNotNull(gui.getConstructor(container));
     }
 }

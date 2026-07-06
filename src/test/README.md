@@ -17,6 +17,7 @@ These tests keep the addon config schema, example files, and MMCEGE API contract
 
 - Parser coverage for the `config/mmce-one-block/machines/` sample JSON
 - API bootstrap coverage for the MMCEGE dependency path and public bridge methods
+- GUI bridge contract coverage for the MMCEGE resizable controller GUI constructor consumed by the addon
 - Fixture coverage so the example files do not drift from the docs
 - Directory-loader coverage for invalid files, duplicate ids, disabled definitions, and default GUI style keys
 - Container layout and shift-click route coverage for blueprint and configured internal item slots
