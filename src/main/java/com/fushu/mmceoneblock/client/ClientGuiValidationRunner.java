@@ -56,13 +56,15 @@ public final class ClientGuiValidationRunner {
     private static final String SMART_INTERFACE_KEY = "oneblock_smoke_target";
     private static final float SMART_INTERFACE_VALUE = 42.0F;
     private static final int CLIENT_TILE_STABLE_TICKS = 40;
+    private static final int SERVER_GUI_RETRY_TICKS = 20;
     private static boolean registered = false;
 
     private int ticks;
     private boolean launchedWorld;
     private boolean requestedServerPlacement;
     private boolean placedBlock;
-    private boolean requestedGuiOpen;
+    private volatile boolean requestedGuiOpen;
+    private volatile boolean serverGuiOpenCheckScheduled;
     private boolean installedClientFallback;
     private boolean directFallbackGuiOpen;
     private boolean validatingFactoryGui;
@@ -71,6 +73,7 @@ public final class ClientGuiValidationRunner {
     private UUID playerId;
     private int placedAt;
     private int openedAt;
+    private int lastServerGuiOpenCheckAt = -SERVER_GUI_RETRY_TICKS;
     private int clientTileReadySince;
     private int smartWriteRequestedAt;
     private TileSingleBlockMachineController clientFallbackTile;
@@ -277,9 +280,13 @@ public final class ClientGuiValidationRunner {
         if (server == null) {
             return;
         }
+        if (this.serverGuiOpenCheckScheduled
+            || this.ticks - this.lastServerGuiOpenCheckAt < SERVER_GUI_RETRY_TICKS) {
+            return;
+        }
 
-        this.requestedGuiOpen = true;
-        this.openedAt = this.ticks;
+        this.serverGuiOpenCheckScheduled = true;
+        this.lastServerGuiOpenCheckAt = this.ticks;
         server.addScheduledTask(() -> openSmokeControllerGuiOnServer(server));
     }
 
@@ -323,7 +330,6 @@ public final class ClientGuiValidationRunner {
             }
             TileSingleBlockMachineController controller = (TileSingleBlockMachineController) tile;
             if (!controller.isStructureFormed() || controller.getFoundMachine() == null) {
-                this.requestedGuiOpen = false;
                 MMCEOneBlock.log.info(
                     "[MMCE One Block ClientGuiValidation] waiting for server controller formation id={} formed={} machine={}",
                     TARGET_ID,
@@ -336,10 +342,13 @@ public final class ClientGuiValidationRunner {
             player.openGui(MMCEOneBlock.instance, GuiHandler.GUI_SINGLE_BLOCK_CONTROLLER,
                 world, this.pos.getX(), this.pos.getY(), this.pos.getZ());
             this.openedAt = this.ticks;
+            this.requestedGuiOpen = true;
             MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] requested server GUI open id={} pos={}",
                 TARGET_ID, this.pos);
         } catch (RuntimeException ex) {
             this.asyncFailureReason = "server_open_exception=" + ex.getClass().getName() + ":" + ex.getMessage();
+        } finally {
+            this.serverGuiOpenCheckScheduled = false;
         }
     }
 
