@@ -104,7 +104,7 @@ public final class DevValidationRunner {
 
         if (!this.state.formed) {
             if (!tile.isStructureFormed() || tile.getFoundMachine() == null) {
-                timeoutAfter(160, "structure_not_formed");
+                timeoutAfter(this.state.startedAt, 160, "structure_not_formed");
                 return;
             }
             this.state.formed = true;
@@ -165,7 +165,7 @@ public final class DevValidationRunner {
                 prepareChunkReloadValidation(world, tile);
                 return;
             }
-            timeoutAfter(360, "recipe_not_finished");
+            timeoutAfter(this.state.recipeStartedAt, 360, "recipe_not_finished");
         }
     }
 
@@ -497,10 +497,14 @@ public final class DevValidationRunner {
         }
     }
 
-    private void timeoutAfter(int maxTicks, String reason) {
-        if (this.state.ticks - this.state.startedAt > maxTicks) {
+    private void timeoutAfter(int startTick, int maxTicks, String reason) {
+        if (hasTimedOut(this.state.ticks, startTick, maxTicks)) {
             fail(reason);
         }
+    }
+
+    static boolean hasTimedOut(int currentTick, int startTick, int maxTicks) {
+        return currentTick - startTick > maxTicks;
     }
 
     private void pass() {
