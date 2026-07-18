@@ -203,9 +203,10 @@ public final class ClientGuiValidationRunner {
                 return;
             }
 
-            ((TileSingleBlockMachineController) tile).setDefinitionId(TARGET_ID);
+            TileSingleBlockMachineController controller = (TileSingleBlockMachineController) tile;
+            controller.setDefinitionId(TARGET_ID);
             tile.markDirty();
-            tile.markForUpdateSync();
+            controller.markForUpdateSync();
             world.notifyBlockUpdate(this.pos, oldState, state, 3);
             player.connection.setPlayerLocation(
                 this.pos.getX() + 0.5D,
