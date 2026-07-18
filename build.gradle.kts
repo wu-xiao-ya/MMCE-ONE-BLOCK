@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.fushu.mmce"
-version = "0.1.0-dev"
+version = "0.1.0"
 
 java {
     withSourcesJar()
@@ -35,7 +35,7 @@ dependencies {
     val modularMachineryCurse = (project.findProperty("modularMachineryCurse") as String?)
         ?: "curse.maven:modular-machinery-community-edition-817377:7372953"
     val mmceGuiExtMaven = (project.findProperty("mmceGuiExtMaven") as String?)
-        ?: "com.fushu.mmce:MMCEGE:1.2.0"
+        ?: "com.fushu.mmce:MMCEGE:1.3.0"
     val mmcegeLocalJarPath = (project.findProperty("mmcegeLocalJar") as String?)?.trim()
     val mmcegeLocalJar = if (mmcegeLocalJarPath.isNullOrEmpty()) null else file(mmcegeLocalJarPath)
 

@@ -9,9 +9,20 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir '..')).Path
 $logPath = Join-Path $repoRoot 'run\logs\latest.log'
+$machineCount = [int](& (Join-Path $scriptDir 'Get-SmokeMachineCount.ps1'))
+$expectedFixtures = @(
+    'starter_controller.json',
+    'starter_factory_controller.json'
+)
 
 if (-not $SkipPrepare) {
     & (Join-Path $scriptDir 'prepare-smoke-run.ps1') -AcceptEula
+}
+
+foreach ($fixture in $expectedFixtures) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "examples\smoke\config\mmce-one-block\machines\$fixture"))) {
+        throw "Smoke fixture not found: $fixture"
+    }
 }
 
 $logDir = Split-Path -Parent $logPath
@@ -48,10 +59,15 @@ try {
                 throw "Client GUI validation failed; inspect log: $logPath"
             }
             $loaded = $log.Contains('Forge Mod Loader has successfully loaded') `
-                -and $log.Contains('Loaded 1 one-block machine definition(s)') `
-                -and $log.Contains('Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)')
+                -and $log.Contains("Loaded $machineCount one-block machine definition(s)") `
+                -and $log.Contains("Validated $machineCount one-block machine definition(s) against loaded MMCE machines (0 missing, 0 mismatched)")
             if ($GuiValidation) {
-                $loaded = $loaded -and $log.Contains('[MMCE One Block ClientGuiValidation] PASS id=starter_controller')
+                $loaded = $loaded `
+                    -and $log.Contains('[MMCE One Block ClientGuiValidation] PASS id=starter_controller') `
+                    -and $log.Contains('[MMCE One Block ClientGuiValidation] PASS id=factory_controller') `
+                    -and $log.Contains('verified virtual Smart Interface write key=oneblock_smoke_target value=42.0') `
+                    -and $log.Contains('for id=starter_controller') `
+                    -and $log.Contains('for id=factory_controller')
             }
             if ($loaded) {
                 break

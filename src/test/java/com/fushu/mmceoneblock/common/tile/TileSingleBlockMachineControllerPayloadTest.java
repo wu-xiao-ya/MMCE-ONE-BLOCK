@@ -14,6 +14,7 @@ import java.nio.file.Paths;
 import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class TileSingleBlockMachineControllerPayloadTest {
@@ -34,9 +35,12 @@ public final class TileSingleBlockMachineControllerPayloadTest {
         tile.writeOneBlockPayload(output);
 
         assertEquals("runtime_test", output.getString("definitionId"));
-        assertEquals(750L, output.getLong("oneBlockEnergy"));
-        assertTrue(output.hasKey("oneBlockFluid"));
-        assertTrue(output.hasKey("oneBlockGas"));
+        assertEquals(
+            750L,
+            output.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY)
+                .getCompoundTag("energy").getLong("energy")
+        );
+        assertFalse(output.hasKey("oneBlockEnergy"));
     }
 
     @Test

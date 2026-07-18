@@ -1,0 +1,85 @@
+{
+  "registryname": "mmceoneblock:factory_controller",
+  "mmce_gui_ext": {
+    "factoryController": {
+      "guiWidth": 280,
+      "guiHeight": 213,
+      "hideDefaultBackground": false,
+      "threadQueueMode": "tooltip",
+      "threadTooltip": true,
+      "slotGroups": [
+        {
+          "id": "input",
+          "firstSlot": 37,
+          "slotCount": 9,
+          "x": 112,
+          "y": 17,
+          "rows": 2,
+          "columns": 5,
+          "spacingX": 18,
+          "spacingY": 18,
+          "shiftTarget": "playerInventory",
+          "enabled": true
+        },
+        {
+          "id": "output",
+          "firstSlot": 46,
+          "slotCount": 9,
+          "x": 112,
+          "y": 66,
+          "rows": 2,
+          "columns": 5,
+          "spacingX": 18,
+          "spacingY": 18,
+          "shiftTarget": "playerInventory",
+          "enabled": true
+        },
+        {
+          "id": "blueprint",
+          "firstSlot": 36,
+          "slotCount": 1,
+          "x": 255,
+          "y": 8,
+          "rows": 1,
+          "columns": 1,
+          "spacingX": 18,
+          "spacingY": 18,
+          "shiftTarget": "playerInventory",
+          "enabled": true
+        }
+      ],
+      "playerInventory": {
+        "x": 112,
+        "y": 131,
+        "hotbarX": 112,
+        "hotbarY": 189,
+        "mainStart": 0,
+        "hotbarStart": 27,
+        "enabled": true
+      },
+      "texts": [
+        {
+          "id": "factory_title",
+          "x": 112,
+          "y": 6,
+          "value": "One Block Factory",
+          "color": "FFFFFF",
+          "shadow": true
+        }
+      ],
+      "buttons": [
+        {
+          "id": "open_factory_threads",
+          "x": 224,
+          "y": 32,
+          "width": 48,
+          "height": 18,
+          "label": "Threads",
+          "action": "subgui",
+          "targetSubGui": "factory_threads",
+          "openMode": "modal"
+        }
+      ]
+    }
+  }
+}

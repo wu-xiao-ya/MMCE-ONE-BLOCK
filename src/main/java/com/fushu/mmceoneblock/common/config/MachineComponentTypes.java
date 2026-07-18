@@ -59,6 +59,27 @@ public final class MachineComponentTypes {
             || "energy".equals(kind);
     }
 
+    public static boolean isReservedUnsupported(String type) {
+        String normalized = normalize(type);
+        return "parallel_controller".equals(normalized)
+            || "upgrade_bus".equals(normalized)
+            || "smart_interface".equals(normalized);
+    }
+
+    public static String unsupportedAlternative(String type) {
+        String normalized = normalize(type);
+        if ("smart_interface".equals(normalized)) {
+            return "use the backing MMCE machine's native virtual Smart Interface and MMCEGE smartInterfaceEditors";
+        }
+        if ("parallel_controller".equals(normalized)) {
+            return "use the factory controller thread limit for 0.1.0";
+        }
+        if ("upgrade_bus".equals(normalized)) {
+            return "declare fixed component capacities in the one-block machine config for 0.1.0";
+        }
+        return "no 0.1.0 runtime replacement is available";
+    }
+
     public static String kind(String type) {
         String normalized = normalize(type);
         if (normalized.endsWith("_input")) {

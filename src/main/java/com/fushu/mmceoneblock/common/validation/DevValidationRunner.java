@@ -3,6 +3,8 @@ package com.fushu.mmceoneblock.common.validation;
 import com.fushu.mmceoneblock.MMCEOneBlock;
 import com.fushu.mmceoneblock.common.block.BlockSingleBlockMachineController;
 import com.fushu.mmceoneblock.common.registry.MachineRegistry;
+import com.fushu.mmceoneblock.common.tile.MachineComponentStorage;
+import com.fushu.mmceoneblock.common.tile.TileSingleBlockFactoryController;
 import com.fushu.mmceoneblock.common.tile.TileSingleBlockMachineController;
 import hellfirepvp.modularmachinery.common.block.BlockController;
 import hellfirepvp.modularmachinery.common.machine.MachineComponent;
@@ -51,6 +53,7 @@ public final class DevValidationRunner {
         }
         registered = true;
         MinecraftForge.EVENT_BUS.register(new DevValidationRunner());
+        MinecraftForge.EVENT_BUS.register(new FactoryValidationRunner());
         MMCEOneBlock.log.info("[MMCE One Block DevValidation] Enabled by -D{}=true", ENABLE_PROPERTY);
     }
 
@@ -291,7 +294,8 @@ public final class DevValidationRunner {
             fail("nbt_definition_mismatch:" + tag.getString("definitionId"));
             return false;
         }
-        if (!tag.hasKey("oneBlockFluid") || !tag.hasKey("oneBlockGas") || !tag.hasKey("oneBlockEnergy")) {
+        if (!tag.hasKey(MachineComponentStorage.COMPONENTS_NBT_KEY)
+            || !tag.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY).hasKey("energy_in")) {
             fail("nbt_payload_missing");
             return false;
         }
@@ -528,6 +532,116 @@ public final class DevValidationRunner {
     private void fail(String reason) {
         this.state.done = true;
         MMCEOneBlock.log.error("[MMCE One Block DevValidation] FAIL reason={}", reason);
+    }
+
+    private static final class FactoryValidationRunner {
+        private static final String FACTORY_TARGET_ID = "factory_controller";
+
+        private int ticks;
+        private int startedAt;
+        private BlockPos pos;
+        private boolean done;
+
+        @SubscribeEvent
+        public void onServerTick(TickEvent.ServerTickEvent event) {
+            if (event.phase != TickEvent.Phase.END || done) {
+                return;
+            }
+            try {
+                tick();
+            } catch (RuntimeException ex) {
+                fail("exception=" + ex.getClass().getName() + ":" + ex.getMessage());
+            }
+        }
+
+        private void tick() {
+            ticks++;
+            if (ticks < 20) {
+                return;
+            }
+
+            WorldServer world = FMLCommonHandler.instance().getMinecraftServerInstance().getWorld(0);
+            if (world == null) {
+                return;
+            }
+            if (pos == null) {
+                placeFactory(world);
+                return;
+            }
+
+            TileEntity rawTile = world.getTileEntity(pos);
+            if (!(rawTile instanceof TileSingleBlockFactoryController)) {
+                fail("wrong_tile=" + (rawTile == null ? "null" : rawTile.getClass().getName()));
+                return;
+            }
+
+            TileSingleBlockFactoryController tile = (TileSingleBlockFactoryController) rawTile;
+            if (!tile.isStructureFormed() || tile.getFoundMachine() == null) {
+                if (ticks - startedAt > 160) {
+                    fail("structure_not_formed");
+                }
+                return;
+            }
+
+            Collection<MachineComponent<?>> components = tile.provideMachineComponents();
+            if (components.isEmpty()) {
+                fail("components_missing");
+                return;
+            }
+
+            NBTTagCompound tag = new NBTTagCompound();
+            tile.writeToNBT(tag);
+            if (!FACTORY_TARGET_ID.equals(tag.getString("definitionId"))) {
+                fail("nbt_definition_mismatch:" + tag.getString("definitionId"));
+                return;
+            }
+            if (!tag.hasKey(MachineComponentStorage.COMPONENTS_NBT_KEY)
+                || !tag.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY).hasKey("energy_in")) {
+                fail("nbt_payload_missing");
+                return;
+            }
+
+            world.destroyBlock(pos, false);
+            done = true;
+            MMCEOneBlock.log.info(
+                "[MMCE One Block DevValidation] FACTORY_PASS id={} factoryFormed=true factoryComponents=true factoryNbtPayload=true",
+                FACTORY_TARGET_ID
+            );
+        }
+
+        private void placeFactory(WorldServer world) {
+            MachineRegistry.MachineEntry entry = MachineRegistry.snapshot().get(FACTORY_TARGET_ID);
+            if (entry == null) {
+                fail("missing_machine_entry:" + FACTORY_TARGET_ID);
+                return;
+            }
+
+            BlockPos spawn = world.getSpawnPoint();
+            pos = new BlockPos(spawn.getX() + 1040, Math.max(80, spawn.getY() + 1), spawn.getZ() + 1024);
+            startedAt = ticks;
+            world.setBlockToAir(pos);
+            world.setBlockState(pos.down(), Blocks.STONE.getDefaultState(), 3);
+            BlockSingleBlockMachineController block = entry.getBlock();
+            world.setBlockState(pos, block.getDefaultState().withProperty(BlockController.FACING, EnumFacing.NORTH), 3);
+            TileEntity tile = world.getTileEntity(pos);
+            if (tile instanceof TileSingleBlockFactoryController) {
+                ((TileSingleBlockFactoryController) tile).setDefinitionId(FACTORY_TARGET_ID);
+            }
+            MMCEOneBlock.log.info(
+                "[MMCE One Block DevValidation] factory placed id={} pos={}",
+                FACTORY_TARGET_ID,
+                pos
+            );
+        }
+
+        private void fail(String reason) {
+            done = true;
+            MMCEOneBlock.log.error(
+                "[MMCE One Block DevValidation] FACTORY_FAIL id={} reason={}",
+                FACTORY_TARGET_ID,
+                reason
+            );
+        }
     }
 
     private static final class ValidationState {

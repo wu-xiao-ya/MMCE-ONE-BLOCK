@@ -1,0 +1,41 @@
+{
+  "registryname": "mmceoneblock:factory_controller",
+  "controller": "factory",
+  "id": "factory_threads",
+  "mode": "modal",
+  "x": 92,
+  "y": 18,
+  "draggable": true,
+  "dragHandle": true,
+  "dragX": 0,
+  "dragY": 0,
+  "dragWidth": 176,
+  "dragHeight": 16,
+  "guiWidth": 176,
+  "guiHeight": 132,
+  "hideDefaultBackground": false,
+  "threadQueueMode": "visible",
+  "threadTooltip": false,
+  "texts": [
+    {
+      "id": "factory_threads_title",
+      "x": 8,
+      "y": 6,
+      "value": "Factory Threads",
+      "color": "FFFFFF",
+      "shadow": true
+    }
+  ],
+  "buttons": [
+    {
+      "id": "close_factory_threads",
+      "x": 148,
+      "y": 4,
+      "width": 20,
+      "height": 18,
+      "label": "X",
+      "action": "close_subgui",
+      "hotkey": "ESCAPE"
+    }
+  ]
+}

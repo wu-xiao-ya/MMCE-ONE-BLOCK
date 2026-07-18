@@ -37,12 +37,14 @@ try {
             if ($null -eq $log) {
                 $log = ''
             }
-            if ($log.Contains('[MMCE One Block DevValidation] FAIL')) {
+            if ($log.Contains('[MMCE One Block DevValidation] FAIL') `
+                -or $log.Contains('[MMCE One Block DevValidation] FACTORY_FAIL')) {
                 $finished = $true
                 $failed = $true
                 break
             }
-            if ($log.Contains('[MMCE One Block DevValidation] PASS id=starter_controller')) {
+            if ($log.Contains('[MMCE One Block DevValidation] PASS id=starter_controller') `
+                -and $log.Contains('[MMCE One Block DevValidation] FACTORY_PASS id=factory_controller')) {
                 $finished = $true
                 break
             }

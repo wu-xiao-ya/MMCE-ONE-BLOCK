@@ -27,6 +27,8 @@ $required = @(
     '[MMCE One Block DevValidation] chunk reload persisted id=starter_controller',
     '[MMCE One Block DevValidation] destroy drop verified id=starter_controller',
     '[MMCE One Block DevValidation] PASS id=starter_controller',
+    '[MMCE One Block DevValidation] factory placed id=factory_controller',
+    '[MMCE One Block DevValidation] FACTORY_PASS id=factory_controller',
     'formed=true',
     'redstonePaused=true',
     'outputBlocked=true',
@@ -38,7 +40,10 @@ $required = @(
     'energyPersisted=true',
     'comparatorAfterFormed=1',
     'blockDropped=true',
-    'tileCleared=true'
+    'tileCleared=true',
+    'factoryFormed=true',
+    'factoryComponents=true',
+    'factoryNbtPayload=true'
 )
 
 foreach ($needle in $required) {
@@ -49,6 +54,9 @@ foreach ($needle in $required) {
 
 if ($log.Contains('[MMCE One Block DevValidation] FAIL')) {
     throw 'Dev validation log assertion failed; validation reported FAIL.'
+}
+if ($log.Contains('[MMCE One Block DevValidation] FACTORY_FAIL')) {
+    throw 'Dev validation log assertion failed; factory validation reported FACTORY_FAIL.'
 }
 
 Write-Host "Dev validation log assertions passed: $LogPath"

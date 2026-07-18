@@ -10,9 +10,9 @@ on:
         required: false
         default: wu-xiao-ya/Modular-Machinery-Community-Edition-Gui-Edit
       mmcege_ref:
-        description: Preferred MMCEGE ref
+        description: Exact MMCEGE commit SHA
         required: false
-        default: feature/one-block-downstream-api
+        default: bf28dc9ad932dbdb8dc1172969bc7a5b02399141
       mmce_repo:
         description: Modular Machinery CE repository slug used only for the Gradle wrapper/reference checkout
         required: false
@@ -36,24 +36,32 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MODULAR_MACHINERY_CURSE: curse.maven:modular-machinery-community-edition-817377:7372953
-      MMCEGE_MAVEN: com.fushu.mmce:MMCEGE:1.2.0
+      MMCEGE_MAVEN: com.fushu.mmce:MMCEGE:1.3.0
       RUN_SMOKE: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.run_smoke == 'true' }}
       RUN_CLIENT_SMOKE: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.run_client_smoke == 'true' }}
 
     steps:
-      - name: Detect MMCEGE API branch
+      - name: Verify requested MMCEGE ref
         id: mmcege_ref
         shell: bash
+        env:
+          EXPECTED_MMCEGE_SHA: bf28dc9ad932dbdb8dc1172969bc7a5b02399141
         run: |
           repo="${{ github.event.inputs.mmcege_repo || 'wu-xiao-ya/Modular-Machinery-Community-Edition-Gui-Edit' }}"
-          preferred="${{ github.event.inputs.mmcege_ref || 'feature/one-block-downstream-api' }}"
-          if git ls-remote --heads "https://github.com/${repo}.git" "${preferred}" | grep -q "${preferred}"; then
-            echo "ref=${preferred}" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=main" >> "$GITHUB_OUTPUT"
+          requested="${{ github.event.inputs.mmcege_ref || 'bf28dc9ad932dbdb8dc1172969bc7a5b02399141' }}"
+          if [ "$requested" != "$EXPECTED_MMCEGE_SHA" ]; then
+            echo "MMCEGE must stay pinned to $EXPECTED_MMCEGE_SHA; got '$requested'." >&2
+            exit 1
           fi
+          remote="$(git ls-remote "https://github.com/${repo}.git")"
+          if ! printf '%s\n' "$remote" | awk -v wanted="$requested" \
+            '$1 == wanted { found=1 } END { exit found ? 0 : 1 }'; then
+            echo "Requested MMCEGE SHA '$requested' was not found in $repo; refusing to fall back." >&2
+            exit 1
+          fi
+          echo "ref=${requested}" >> "$GITHUB_OUTPUT"
 
-      - name: Detect MMCE wrapper branch
+      - name: Verify MMCE wrapper branch
         id: mmce_ref
         shell: bash
         run: |
@@ -62,7 +70,8 @@ jobs:
           if git ls-remote --heads "https://github.com/${repo}.git" "${preferred}" | grep -q "${preferred}"; then
             echo "ref=${preferred}" >> "$GITHUB_OUTPUT"
           else
-            echo "ref=master" >> "$GITHUB_OUTPUT"
+            echo "Requested MMCE wrapper/reference ref '$preferred' was not found in $repo." >&2
+            exit 1
           fi
 
       - name: Checkout MMCEGE
@@ -106,7 +115,7 @@ jobs:
         working-directory: mmce-src
         run: |
           chmod +x gradlew
-          ./gradlew -p ../mmcege --no-daemon --no-parallel --console=plain test jar publishToMavenLocal --stacktrace
+          ./gradlew -p ../mmcege --no-daemon --no-parallel --console=plain build publishToMavenLocal --stacktrace
 
       - name: Checkout MMCE One Block
         uses: actions/checkout@v4
@@ -143,6 +152,102 @@ jobs:
           grep -q 'S:smartInterfaceEditorVirtualKey=energy_target,fluid_target' examples/client.cfg.sample
           grep -q 'S:specialThreadBackgroundColor=FF7DD3FC' examples/client.cfg.sample
 
+      - name: Validate smoke fixtures and model resources
+        shell: bash
+        working-directory: mmce-one-block
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path(".")
+          machine_dir = root / "examples/smoke/config/mmce-one-block/machines"
+          optional_advanced = root / "examples/optional/advanced_mana_pool_controller.json"
+          machines = sorted(machine_dir.glob("*.json"))
+          assert [file.name for file in machines] == [
+              "advanced_mana_pool_controller.json",
+              "starter_controller.json",
+              "starter_factory_controller.json",
+          ]
+          assert len(machines) == 3
+          for file in machines:
+              json.loads(file.read_text(encoding="utf-8-sig"))
+
+          advanced = json.loads(
+              (machine_dir / "advanced_mana_pool_controller.json").read_text(encoding="utf-8-sig")
+          )
+          assert advanced == json.loads(optional_advanced.read_text(encoding="utf-8-sig"))
+
+          starter = json.loads(
+              (machine_dir / "starter_controller.json").read_text(encoding="utf-8-sig")
+          )
+          assert starter["id"] == "starter_controller"
+          assert starter["guiStyle"] == "mmceoneblock:starter_controller"
+
+          factory_controller = json.loads(
+              (machine_dir / "starter_factory_controller.json").read_text(encoding="utf-8-sig")
+          )
+          assert factory_controller["id"] == "factory_controller"
+          assert factory_controller["controllerType"] == "factory"
+          assert factory_controller["factoryGuiStyle"] == "mmceoneblock:factory_controller"
+
+          starter_style = json.loads(
+              (root / "examples/smoke/config/mmceguiext/styles/starter_controller.json")
+              .read_text(encoding="utf-8-sig")
+          )
+          starter_machine = starter_style["mmce_gui_ext"]["machineController"]
+          assert starter_machine["smartInterfaceEditors"][0]["virtualKey"] == "oneblock_smoke_target"
+          assert starter_machine["dynamicVisuals"][0]["source"]["key"] == "oneblock.component.energy_in.amount"
+          assert starter_machine["dynamicVisuals"][0]["source"]["maxSource"]["key"] == "oneblock.component.energy_in.capacity"
+
+          assert advanced["id"] == "advanced_mana_pool_controller"
+          assert advanced["machine"] == "starter_machine"
+          assert advanced["block"]["model"].endswith("_empty")
+          assert advanced["block"]["itemModel"].endswith("_full")
+          assert advanced["components"][0]["type"] == "fluid_input"
+
+          block = advanced["block"]
+          assert [level["minFillRatio"] for level in block["textureLevels"]] == [
+              0.25, 0.5, 0.75, 1.0
+          ]
+          assert all(level["content"] == "fluid" for level in block["textureLevels"])
+
+          model_ids = {
+              block["model"],
+              block["itemModel"],
+              *(state["model"] for state in block["states"].values()),
+              *(level["model"] for level in block["textureLevels"]),
+          }
+          for model_id in model_ids:
+              namespace, path = model_id.split(":", 1)
+              model = root / "src/main/resources/assets" / namespace / "models/block" / f"{path}.json"
+              assert model.is_file(), model
+
+          factory_style = json.loads(
+              (root / "examples/smoke/config/mmceguiext/styles/factory_controller.json")
+              .read_text(encoding="utf-8-sig")
+          )
+          factory = factory_style["mmce_gui_ext"]["factoryController"]
+          assert [group["id"] for group in factory["slotGroups"]] == [
+              "input", "output", "blueprint"
+          ]
+          assert factory["buttons"][0]["targetSubGui"] == "factory_threads"
+
+          subgui = json.loads(
+              (root / "examples/smoke/config/mmceguiext/subgui/factory_threads.json")
+              .read_text(encoding="utf-8-sig")
+          )
+          assert subgui["controller"] == "factory"
+          assert subgui["id"] == "factory_threads"
+          assert subgui["threadQueueMode"] == "visible"
+
+          for texture_id in block["textures"].values():
+              namespace, path = texture_id.split(":", 1)
+              assert namespace == "mmceoneblock"
+              texture = root / "src/main/resources/assets" / namespace / "textures" / f"{path}.png"
+              assert texture.is_file(), texture
+          PY
+
       - name: Check test sources are real JUnit tests
         shell: bash
         working-directory: mmce-one-block
@@ -152,8 +257,11 @@ jobs:
           grep -q '@Test' src/test/java/com/fushu/mmceoneblock/examples/OneBlockExampleFixtureTest.java
           grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/config/MachineConfigLoaderDirectoryTest.java
           grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/container/ContainerSingleBlockControllerTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/container/ContainerSingleBlockFactoryControllerTest.java
           grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/registry/MachineRegistryValidationTest.java
           grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/tile/TileSingleBlockMachineControllerPayloadTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/tile/TileSingleBlockMachineControllerRuntimeComponentTest.java
+          grep -q '@Test' src/test/java/com/fushu/mmceoneblock/common/tile/TileSingleBlockFactoryControllerRuntimeTest.java
           grep -q '@Test' src/test/java/com/fushu/mmceoneblock/tile/TileSingleBlockMachineControllerTest.java
 
       - name: Build MMCE One Block
@@ -185,13 +293,15 @@ jobs:
             exit "$status"
           fi
           log="../mmce-one-block/run/logs/latest.log"
-          grep -q "Loaded 1 one-block machine definition(s)" "$log"
-          grep -q "Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)" "$log"
+          machine_count="$(find ../mmce-one-block/examples/smoke/config/mmce-one-block/machines -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
+          grep -q "Loaded ${machine_count} one-block machine definition(s)" "$log"
+          grep -q "Validated ${machine_count} one-block machine definition(s) against loaded MMCE machines (0 missing, 0 mismatched)" "$log"
           grep -q "Machines: \\[1 loaded, 0 failed\\]" "$log"
           grep -q "modularmachinery:starter_machine (Recipes): \\[1 loaded, 0 failed\\]" "$log"
           grep -q "Forge Mod Loader has successfully loaded" "$log"
           grep -q "Done (" "$log"
           grep -q "\\[MMCE One Block DevValidation\\] PASS id=starter_controller" "$log"
+          grep -q "\\[MMCE One Block DevValidation\\] FACTORY_PASS id=factory_controller" "$log"
           grep -q "formed=true" "$log"
           grep -q "redstonePaused=true" "$log"
           grep -q "outputBlocked=true" "$log"
@@ -205,10 +315,16 @@ jobs:
           grep -q "destroy drop verified id=starter_controller" "$log"
           grep -q "blockDropped=true" "$log"
           grep -q "tileCleared=true" "$log"
+          grep -q "factoryFormed=true" "$log"
+          grep -q "factoryComponents=true" "$log"
+          grep -q "factoryNbtPayload=true" "$log"
           if grep -q "Skipping one-block machine" "$log"; then
             exit 1
           fi
           if grep -q "\\[MMCE One Block DevValidation\\] FAIL" "$log"; then
+            exit 1
+          fi
+          if grep -q "\\[MMCE One Block DevValidation\\] FACTORY_FAIL" "$log"; then
             exit 1
           fi
           cp "$log" "../mmce-one-block/run/logs/server-smoke-latest.log"
@@ -231,6 +347,7 @@ jobs:
           setsid xvfb-run -a -s "-screen 0 1280x1024x24 +extension RANDR +extension GLX +render -noreset" bash -lc 'xrandr -q || true; exec ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain -PmmceOneBlockClientGuiValidation=true runClient --stacktrace' &
           client_pid=$!
           loaded=0
+          machine_count="$(find ../mmce-one-block/examples/smoke/config/mmce-one-block/machines -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
           deadline=$((SECONDS + 300))
           log="../mmce-one-block/run/logs/latest.log"
           while [ "$SECONDS" -lt "$deadline" ]; do
@@ -243,14 +360,20 @@ jobs:
             if [ -f "$log" ] \
               && grep -q "LWJGL Version" "$log" \
               && grep -q "MinecraftForge v" "$log" \
-              && grep -q "Loaded 1 one-block machine definition(s)" "$log" \
-              && grep -q "Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)" "$log" \
+              && grep -q "Loaded ${machine_count} one-block machine definition(s)" "$log" \
+              && grep -q "Validated ${machine_count} one-block machine definition(s) against loaded MMCE machines (0 missing, 0 mismatched)" "$log" \
               && grep -q "Forge Mod Loader has successfully loaded" "$log" \
               && grep -q "mmceoneblock" "$log" \
               && grep -q "mmceguiext" "$log" \
               && grep -q "\\[MMCE One Block ClientGuiValidation\\] PASS id=starter_controller" "$log" \
+              && grep -q "\\[MMCE One Block ClientGuiValidation\\] PASS id=factory_controller" "$log" \
               && grep -q "screen=com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable" "$log" \
+              && grep -q "screen=com.fushu.mmceguiext.client.gui.GuiFactoryControllerResizable" "$log" \
               && grep -q "container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockController" "$log" \
+              && grep -q "container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockFactoryController" "$log" \
+              && grep -q "verified virtual Smart Interface write key=oneblock_smoke_target value=42.0" "$log" \
+              && grep -q "screenshot saved under .* for id=starter_controller" "$log" \
+              && grep -q "screenshot saved under .* for id=factory_controller" "$log" \
               && grep -q "styleRuntime=true" "$log" \
               && grep -q "displayed=true" "$log"; then
               loaded=1
@@ -285,7 +408,13 @@ jobs:
           if grep -q "Exception loading model for variant modularmachinery:starter_machine_controller" "$log"; then
             exit 1
           fi
+          if grep -q "Exception loading model for variant modularmachinery:factory_controller" "$log"; then
+            exit 1
+          fi
           if grep -q "FileNotFoundException: modularmachinery:blockstates/starter_machine_controller.json" "$log"; then
+            exit 1
+          fi
+          if grep -q "FileNotFoundException: modularmachinery:blockstates/factory_controller.json" "$log"; then
             exit 1
           fi
           if grep -q "A fatal error has occurred" "$log"; then
@@ -304,9 +433,11 @@ jobs:
           path: |
             mmce-one-block/run/logs
             mmce-one-block/run/crash-reports
+            mmce-one-block/run/screenshots
           if-no-files-found: ignore
 
       - name: Upload MMCE One Block artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: mmce-one-block-${{ github.sha }}

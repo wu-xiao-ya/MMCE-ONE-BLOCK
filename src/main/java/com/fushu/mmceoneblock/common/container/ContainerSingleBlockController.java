@@ -1,28 +1,42 @@
 package com.fushu.mmceoneblock.common.container;
 
+import com.fushu.mmceguiext.api.gui.PlayerInventoryDescriptor;
+import com.fushu.mmceguiext.api.gui.SlotGroupDescriptor;
+import com.fushu.mmceguiext.api.gui.SlotLayoutProvider;
+import com.fushu.mmceoneblock.common.tile.TileSingleBlockMachineController;
 import hellfirepvp.modularmachinery.common.container.ContainerController;
 import hellfirepvp.modularmachinery.common.item.ItemBlueprint;
-import hellfirepvp.modularmachinery.common.tiles.TileMachineController;
-import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Slot;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.SlotItemHandler;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.List;
 
-public class ContainerSingleBlockController extends ContainerController {
-    private static final int PLAYER_SLOT_COUNT = 36;
-    private static final int INTERNAL_SLOT_START_X = 8;
-    private static final int INTERNAL_SLOT_START_Y = 17;
-    private static final int INTERNAL_SLOT_COLUMNS = 8;
-    private static final int SLOT_SPACING = 18;
+public class ContainerSingleBlockController extends ContainerController implements SlotLayoutProvider {
+    private final TileSingleBlockMachineController owner;
+    private final int inputInternalSlotCount;
 
-    public ContainerSingleBlockController(TileMachineController owner, EntityPlayer opening) {
+    public ContainerSingleBlockController(TileSingleBlockMachineController owner, EntityPlayer opening) {
         super(owner, opening);
-        addInternalItemSlots(owner);
+        this.owner = owner;
+        this.inputInternalSlotCount = owner.getItemInputSlotCount();
+        for (Slot slot : OneBlockContainerSupport.createMachineSlots(
+            owner.getInventory(),
+            OneBlockContainerSupport.Layout.CONTROLLER,
+            this.inputInternalSlotCount
+        )) {
+            addSlotToContainer(slot);
+        }
+    }
+
+    public static int blueprintSlotIndex() {
+        return OneBlockContainerSupport.blueprintSlotIndex();
+    }
+
+    public static int firstInternalSlotIndex() {
+        return OneBlockContainerSupport.firstMachineSlotIndex();
     }
 
     @Override
@@ -32,18 +46,20 @@ public class ContainerSingleBlockController extends ContainerController {
             return ItemStack.EMPTY;
         }
 
-        ItemStack result = ItemStack.EMPTY;
         Slot slot = this.inventorySlots.get(index);
-
         if (slot == null || !slot.getHasStack()) {
             return ItemStack.EMPTY;
         }
 
         ItemStack stackInSlot = slot.getStack();
-        result = stackInSlot.copy();
-
-        MergeRange target = transferTarget(index, stackInSlot.getItem() instanceof ItemBlueprint, this.inventorySlots.size());
-        if (!target.isValid() || !this.mergeItemStack(stackInSlot, target.start, target.end, target.reverse)) {
+        ItemStack result = stackInSlot.copy();
+        OneBlockContainerSupport.MergeRange target = OneBlockContainerSupport.transferTarget(
+            index,
+            stackInSlot.getItem() instanceof ItemBlueprint,
+            this.inventorySlots.size(),
+            this.inputInternalSlotCount
+        );
+        if (!target.isValid() || !this.mergeItemStack(stackInSlot, target.getStart(), target.getEnd(), target.isReverse())) {
             return ItemStack.EMPTY;
         }
 
@@ -61,116 +77,16 @@ public class ContainerSingleBlockController extends ContainerController {
         return result;
     }
 
-    private void addInternalItemSlots(TileMachineController owner) {
-        IItemHandler itemHandler = owner.getInventory().asGUIAccess();
-        int totalSlots = itemHandler.getSlots();
-        if (totalSlots <= 1) {
-            return;
-        }
-
-        for (int slotIndex = 1; slotIndex < totalSlots; slotIndex++) {
-            int offset = slotIndex - 1;
-            int x = internalSlotX(offset);
-            int y = internalSlotY(offset);
-            addSlotToContainer(new SlotInternalItem(itemHandler, slotIndex, x, y));
-        }
+    @Override
+    public List<SlotGroupDescriptor> getSlotGroups() {
+        return OneBlockContainerSupport.Layout.CONTROLLER.slotGroups(
+            this.inputInternalSlotCount,
+            this.owner.getInventory().getSlots()
+        );
     }
 
-    public static int playerSlotCount() {
-        return PLAYER_SLOT_COUNT;
-    }
-
-    public static int controllerSlotStart() {
-        return blueprintSlotIndex();
-    }
-
-    public static int blueprintSlotIndex() {
-        return PLAYER_SLOT_COUNT + TileMultiblockMachineController.BLUEPRINT_SLOT;
-    }
-
-    public static int firstInternalSlotIndex() {
-        return blueprintSlotIndex() + 1;
-    }
-
-    public static boolean isBlueprintSlotIndex(int index) {
-        return index == blueprintSlotIndex();
-    }
-
-    public static boolean isInternalSlotIndex(int index, int slotCount) {
-        return index >= firstInternalSlotIndex() && index < slotCount;
-    }
-
-    static boolean isInternalItemValid(@Nonnull ItemStack stack) {
-        return isInternalItemValid(stack.getItem());
-    }
-
-    static boolean isInternalItemValid(@Nonnull Item item) {
-        return !(item instanceof ItemBlueprint);
-    }
-
-    static int internalSlotX(int offset) {
-        return INTERNAL_SLOT_START_X + (offset % INTERNAL_SLOT_COLUMNS) * SLOT_SPACING;
-    }
-
-    static int internalSlotY(int offset) {
-        return INTERNAL_SLOT_START_Y + (offset / INTERNAL_SLOT_COLUMNS) * SLOT_SPACING;
-    }
-
-    static MergeRange transferTarget(int index, boolean blueprint, int slotCount) {
-        if (index < 0 || index >= slotCount) {
-            return MergeRange.none();
-        }
-        if (index < PLAYER_SLOT_COUNT) {
-            if (blueprint) {
-                return new MergeRange(blueprintSlotIndex(), firstInternalSlotIndex(), false);
-            }
-            return isInternalSlotIndex(firstInternalSlotIndex(), slotCount)
-                ? new MergeRange(firstInternalSlotIndex(), slotCount, false)
-                : MergeRange.none();
-        }
-        return new MergeRange(0, PLAYER_SLOT_COUNT, false);
-    }
-
-    static final class MergeRange {
-        private final int start;
-        private final int end;
-        private final boolean reverse;
-
-        private MergeRange(int start, int end, boolean reverse) {
-            this.start = start;
-            this.end = end;
-            this.reverse = reverse;
-        }
-
-        private static MergeRange none() {
-            return new MergeRange(-1, -1, false);
-        }
-
-        private boolean isValid() {
-            return this.start >= 0 && this.end > this.start;
-        }
-
-        int getStart() {
-            return this.start;
-        }
-
-        int getEnd() {
-            return this.end;
-        }
-
-        boolean isReverse() {
-            return this.reverse;
-        }
-    }
-
-    private static class SlotInternalItem extends SlotItemHandler {
-        private SlotInternalItem(IItemHandler itemHandler, int index, int xPosition, int yPosition) {
-            super(itemHandler, index, xPosition, yPosition);
-        }
-
-        @Override
-        public boolean isItemValid(@Nonnull ItemStack stack) {
-            return isInternalItemValid(stack) && super.isItemValid(stack);
-        }
+    @Override
+    public PlayerInventoryDescriptor getPlayerInventory() {
+        return OneBlockContainerSupport.Layout.CONTROLLER.playerInventory();
     }
 }

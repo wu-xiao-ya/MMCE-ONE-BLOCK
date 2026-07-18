@@ -5,6 +5,57 @@
       "guiWidth": 240,
       "guiHeight": 213,
       "hideDefaultBackground": false,
+      "hideDefaultSmartInterfaceEditor": true,
+      "slotGroups": [
+        {
+          "id": "input",
+          "firstSlot": 37,
+          "slotCount": 9,
+          "x": 8,
+          "y": 17,
+          "rows": 2,
+          "columns": 5,
+          "spacingX": 18,
+          "spacingY": 18,
+          "shiftTarget": "playerInventory",
+          "enabled": true
+        },
+        {
+          "id": "output",
+          "firstSlot": 46,
+          "slotCount": 9,
+          "x": 8,
+          "y": 66,
+          "rows": 2,
+          "columns": 5,
+          "spacingX": 18,
+          "spacingY": 18,
+          "shiftTarget": "playerInventory",
+          "enabled": true
+        },
+        {
+          "id": "blueprint",
+          "firstSlot": 36,
+          "slotCount": 1,
+          "x": 151,
+          "y": 8,
+          "rows": 1,
+          "columns": 1,
+          "spacingX": 18,
+          "spacingY": 18,
+          "shiftTarget": "playerInventory",
+          "enabled": true
+        }
+      ],
+      "playerInventory": {
+        "x": 8,
+        "y": 131,
+        "hotbarX": 8,
+        "hotbarY": 189,
+        "mainStart": 0,
+        "hotbarStart": 27,
+        "enabled": true
+      },
       "texts": [
         {
           "id": "smoke_title",
@@ -27,6 +78,34 @@
           "buttonId": "smoke_pulse",
           "textColor": "FFFFFFFF",
           "hoverTextColor": "FF7DD3FC"
+        },
+        {
+          "id": "smoke_smart_set",
+          "x": 184,
+          "y": 30,
+          "width": 44,
+          "height": 16,
+          "label": "Set 42",
+          "action": "smart_set",
+          "key": "oneblock_smoke_target",
+          "value": 42,
+          "textColor": "FFFFFFFF",
+          "hoverTextColor": "FFB4E197"
+        }
+      ],
+      "smartInterfaceEditors": [
+        {
+          "id": "smoke_smart_input",
+          "x": 134,
+          "y": 104,
+          "inputWidth": 70,
+          "virtualKey": "oneblock_smoke_target",
+          "title": "Smoke Target",
+          "showTitle": true,
+          "showInfo": true,
+          "showControls": false,
+          "inputBackground": true,
+          "priority": 20
         }
       ],
       "progressBars": [
@@ -53,10 +132,16 @@
           "width": 120,
           "height": 8,
           "source": {
-            "type": "machine",
-            "metric": "recipeProgress",
-            "min": 0.0,
-            "max": 1.0,
+            "type": "customData",
+            "key": "oneblock.component.energy_in.amount",
+            "default": 0,
+            "min": 0,
+            "max": 1,
+            "maxSource": {
+              "type": "customData",
+              "key": "oneblock.component.energy_in.capacity",
+              "default": 1
+            },
             "clamp": true
           },
           "renderer": {

@@ -1,11 +1,14 @@
 package com.fushu.mmceoneblock.common.registry;
 
 import com.fushu.mmceoneblock.common.block.BlockSingleBlockMachineController;
+import com.fushu.mmceoneblock.common.config.ControllerType;
 import com.fushu.mmceoneblock.common.config.MachineConfigLoader;
 import com.fushu.mmceoneblock.common.config.MachineDefinition;
+import com.fushu.mmceoneblock.common.config.OneBlockRuntimeBinding;
 import com.fushu.mmceoneblock.common.config.SingleBlockMachineTileFactory;
 import com.fushu.mmceoneblock.common.item.ItemBlockSingleBlockMachineController;
 import com.fushu.mmceoneblock.common.tile.TileSingleBlockMachineController;
+import com.fushu.mmceoneblock.common.tile.TileSingleBlockFactoryController;
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
@@ -19,7 +22,6 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -71,15 +73,6 @@ public final class MachineRegistry {
             ENTRIES.clear();
             return;
         }
-        if (tileFactory == null) {
-            tileFactory = new SingleBlockMachineTileFactory() {
-                @Override
-                public TileEntity create(MachineDefinition definition) {
-                    return new TileSingleBlockMachineController(null, definition.getId());
-                }
-            };
-        }
-
         for (MachineDefinition definition : enabledDefinitions) {
             String rawId = definition.getId();
             String id = normalizeId(rawId);
@@ -92,7 +85,8 @@ public final class MachineRegistry {
             if (nextEntries.containsKey(id)) {
                 throw new IllegalStateException("Duplicate machine id '" + definition.getId() + "'");
             }
-            MachineEntry entry = registerOne(definition, tileFactory);
+            OneBlockRuntimeBinding binding = OneBlockRuntimeBinding.fromDefinition(definition);
+            MachineEntry entry = registerOne(binding, tileFactory);
             nextEntries.put(id, entry);
         }
         ENTRIES.clear();
@@ -119,41 +113,206 @@ public final class MachineRegistry {
     }
 
     public static synchronized void validateLoadedMachines() {
-        int removed = 0;
-        Iterator<Map.Entry<String, MachineEntry>> iterator = ENTRIES.entrySet().iterator();
-        while (iterator.hasNext()) {
-            MachineEntry entry = iterator.next().getValue();
-            MachineDefinition definition = entry.definition;
+        int missing = 0;
+        int mismatch = 0;
+        for (MachineEntry entry : ENTRIES.values()) {
+            OneBlockRuntimeBinding currentBinding = entry.getBinding();
+            MachineDefinition definition = currentBinding.getDefinition();
             DynamicMachine machine = hellfirepvp.modularmachinery.common.machine.MachineRegistry
                 .getRegistry()
                 .getMachine(definition.getMachine());
-            if (machine == null) {
+            OneBlockRuntimeBinding resolvedBinding = currentBinding.resolve(machine);
+            entry.binding = resolvedBinding;
+
+            if (resolvedBinding.getResolutionStatus() == OneBlockRuntimeBinding.ResolutionStatus.MISSING_BACKING_MACHINE) {
                 LOGGER.error(
-                    "Skipping one-block machine '{}' because backing MMCE machine '{}' is not loaded. Source: {}",
+                    "One-block machine '{}' is still unresolved because backing MMCE machine '{}' is not loaded. Source: {}",
                     definition.getId(),
                     definition.getMachine(),
                     definition.getSourceFile()
                 );
-                iterator.remove();
-                removed++;
+                missing++;
                 continue;
             }
-            if (machine.isFactoryOnly()) {
-                LOGGER.warn(
-                    "Skipping one-block machine '{}' because backing MMCE machine '{}' is factory-only. Source: {}",
+
+            if (resolvedBinding.getResolutionStatus() == OneBlockRuntimeBinding.ResolutionStatus.FACTORY_ONLY_MISMATCH) {
+                LOGGER.error(
+                    "One-block machine '{}' cannot use MACHINE controller mode because backing MMCE machine '{}' is factory-only. Source: {}",
                     definition.getId(),
                     definition.getMachine(),
                     definition.getSourceFile()
                 );
-                iterator.remove();
-                removed++;
+                mismatch++;
+                continue;
+            }
+
+            ControllerType controllerType = definition.getControllerType();
+            if (machine != null && machine.isFactoryOnly()) {
+                if (controllerType == ControllerType.MACHINE) {
+                    LOGGER.error(
+                        "One-block machine '{}' cannot use MACHINE controller mode because backing MMCE machine '{}' is factory-only. Source: {}",
+                        definition.getId(),
+                        definition.getMachine(),
+                        definition.getSourceFile()
+                    );
+                    mismatch++;
+                } else {
+                    LOGGER.info(
+                        "One-block machine '{}' points to factory-only MMCE machine '{}'; using factory tile (controllerType={}). Source: {}",
+                        definition.getId(),
+                        definition.getMachine(),
+                        controllerType,
+                        definition.getSourceFile()
+                    );
+                }
+            } else if (controllerType == ControllerType.FACTORY) {
+                LOGGER.info(
+                    "One-block machine '{}' forces factory tile for non-factory-only MMCE machine '{}'. Source: {}",
+                    definition.getId(),
+                    definition.getMachine(),
+                    definition.getSourceFile()
+                );
             }
         }
         LOGGER.info(
-            "Validated {} one-block machine definition(s) against loaded MMCE machines ({} skipped)",
+            "Validated {} one-block machine definition(s) against loaded MMCE machines ({} missing, {} mismatched)",
             ENTRIES.size(),
-            removed
+            missing,
+            mismatch
         );
+    }
+
+    @Nullable
+    public static OneBlockRuntimeBinding getBinding(String id) {
+        MachineEntry entry = ENTRIES.get(normalizeId(id));
+        return entry == null ? null : entry.getBinding();
+    }
+
+    @Nullable
+    public static MachineDefinition getDefinition(String id) {
+        OneBlockRuntimeBinding binding = getBinding(id);
+        return binding == null ? null : binding.getDefinition();
+    }
+
+    @Nullable
+    public static BlockSingleBlockMachineController getBlock(String id) {
+        MachineEntry entry = ENTRIES.get(normalizeId(id));
+        return entry == null ? null : entry.block;
+    }
+
+    @Nullable
+    public static ItemBlockSingleBlockMachineController getItem(String id) {
+        MachineEntry entry = ENTRIES.get(normalizeId(id));
+        return entry == null ? null : entry.item;
+    }
+
+    public static List<MachineDefinition> getDefinitions() {
+        List<MachineDefinition> out = new ArrayList<MachineDefinition>();
+        for (MachineEntry entry : ENTRIES.values()) {
+            out.add(entry.getDefinition());
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    public static Map<String, MachineEntry> snapshot() {
+        return Collections.unmodifiableMap(new LinkedHashMap<String, MachineEntry>(ENTRIES));
+    }
+
+    private static MachineEntry registerOne(OneBlockRuntimeBinding binding, SingleBlockMachineTileFactory tileFactory) {
+        BlockSingleBlockMachineController block = new BlockSingleBlockMachineController(binding, tileFactory);
+        ItemBlockSingleBlockMachineController item = block.createItemBlock();
+        return new MachineEntry(binding, block, item);
+    }
+
+    public static TileEntity createDefaultTile(OneBlockRuntimeBinding binding, @Nullable net.minecraft.block.state.IBlockState state) {
+        if (shouldUseFactoryTile(binding)) {
+            return new TileSingleBlockFactoryController(state, binding.getDefinition().getId());
+        }
+        return new TileSingleBlockMachineController(state, binding.getDefinition().getId());
+    }
+
+    public static TileEntity createDefaultTile(MachineDefinition definition, @Nullable net.minecraft.block.state.IBlockState state) {
+        return createDefaultTile(resolveBinding(definition), state);
+    }
+
+    public static boolean shouldUseFactoryTile(OneBlockRuntimeBinding binding) {
+        return binding != null && binding.usesFactoryTile();
+    }
+
+    public static boolean shouldUseFactoryTile(MachineDefinition definition) {
+        return shouldUseFactoryTile(resolveBinding(definition));
+    }
+
+    private static OneBlockRuntimeBinding resolveBinding(MachineDefinition definition) {
+        if (definition == null) {
+            throw new IllegalArgumentException("definition cannot be null");
+        }
+        OneBlockRuntimeBinding registered = getBinding(definition.getId());
+        if (registered != null && registered.getDefinition() == definition) {
+            if (!registered.isPending() || definition.getControllerType() != ControllerType.AUTO) {
+                return registered;
+            }
+        }
+        DynamicMachine backingMachine = hellfirepvp.modularmachinery.common.machine.MachineRegistry
+            .getRegistry()
+            .getMachine(definition.getMachine());
+        OneBlockRuntimeBinding resolved = OneBlockRuntimeBinding.fromDefinition(definition, backingMachine);
+        if (registered != null && registered.getDefinition() == definition) {
+            MachineEntry entry = ENTRIES.get(normalizeId(definition.getId()));
+            if (entry != null) {
+                entry.binding = resolved;
+            }
+        }
+        return resolved;
+    }
+
+    private static void registerTileEntity() {
+        if (tileRegistered) {
+            return;
+        }
+        GameRegistry.registerTileEntity(TileSingleBlockMachineController.class,
+            new ResourceLocation(MODID, "single_block_machine_controller"));
+        GameRegistry.registerTileEntity(TileSingleBlockFactoryController.class,
+            new ResourceLocation(MODID, "single_block_factory_controller"));
+        tileRegistered = true;
+    }
+
+    private static String normalizeId(String id) {
+        return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
+    }
+
+    interface MachineExistenceChecker {
+        boolean exists(ResourceLocation machine);
+    }
+
+    public static final class MachineEntry {
+        private volatile OneBlockRuntimeBinding binding;
+        private final BlockSingleBlockMachineController block;
+        private final ItemBlockSingleBlockMachineController item;
+
+        private MachineEntry(OneBlockRuntimeBinding binding,
+                             BlockSingleBlockMachineController block,
+                             ItemBlockSingleBlockMachineController item) {
+            this.binding = binding;
+            this.block = block;
+            this.item = item;
+        }
+
+        public OneBlockRuntimeBinding getBinding() {
+            return binding;
+        }
+
+        public MachineDefinition getDefinition() {
+            return binding.getDefinition();
+        }
+
+        public BlockSingleBlockMachineController getBlock() {
+            return block;
+        }
+
+        public ItemBlockSingleBlockMachineController getItem() {
+            return item;
+        }
     }
 
     static List<MachineDefinition> filterKnownMachineDefinitions(List<MachineDefinition> definitions,
@@ -178,84 +337,5 @@ public final class MachineRegistry {
             );
         }
         return out;
-    }
-
-    @Nullable
-    public static MachineDefinition getDefinition(String id) {
-        MachineEntry entry = ENTRIES.get(normalizeId(id));
-        return entry == null ? null : entry.definition;
-    }
-
-    @Nullable
-    public static BlockSingleBlockMachineController getBlock(String id) {
-        MachineEntry entry = ENTRIES.get(normalizeId(id));
-        return entry == null ? null : entry.block;
-    }
-
-    @Nullable
-    public static ItemBlockSingleBlockMachineController getItem(String id) {
-        MachineEntry entry = ENTRIES.get(normalizeId(id));
-        return entry == null ? null : entry.item;
-    }
-
-    public static List<MachineDefinition> getDefinitions() {
-        List<MachineDefinition> out = new ArrayList<MachineDefinition>();
-        for (MachineEntry entry : ENTRIES.values()) {
-            out.add(entry.definition);
-        }
-        return Collections.unmodifiableList(out);
-    }
-
-    public static Map<String, MachineEntry> snapshot() {
-        return Collections.unmodifiableMap(new LinkedHashMap<String, MachineEntry>(ENTRIES));
-    }
-
-    private static MachineEntry registerOne(MachineDefinition definition, SingleBlockMachineTileFactory tileFactory) {
-        BlockSingleBlockMachineController block = new BlockSingleBlockMachineController(definition, tileFactory);
-        ItemBlockSingleBlockMachineController item = block.createItemBlock();
-        return new MachineEntry(definition, block, item);
-    }
-
-    private static void registerTileEntity() {
-        if (tileRegistered) {
-            return;
-        }
-        GameRegistry.registerTileEntity(TileSingleBlockMachineController.class,
-            new ResourceLocation(MODID, "single_block_machine_controller"));
-        tileRegistered = true;
-    }
-
-    private static String normalizeId(String id) {
-        return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
-    }
-
-    interface MachineExistenceChecker {
-        boolean exists(ResourceLocation machine);
-    }
-
-    public static final class MachineEntry {
-        private final MachineDefinition definition;
-        private final BlockSingleBlockMachineController block;
-        private final ItemBlockSingleBlockMachineController item;
-
-        private MachineEntry(MachineDefinition definition,
-                             BlockSingleBlockMachineController block,
-                             ItemBlockSingleBlockMachineController item) {
-            this.definition = definition;
-            this.block = block;
-            this.item = item;
-        }
-
-        public MachineDefinition getDefinition() {
-            return definition;
-        }
-
-        public BlockSingleBlockMachineController getBlock() {
-            return block;
-        }
-
-        public ItemBlockSingleBlockMachineController getItem() {
-            return item;
-        }
     }
 }

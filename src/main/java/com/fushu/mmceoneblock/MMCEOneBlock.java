@@ -13,7 +13,7 @@ import org.apache.logging.log4j.Logger;
     modid = MMCEOneBlock.MODID,
     name = MMCEOneBlock.NAME,
     version = MMCEOneBlock.VERSION,
-    dependencies = "required-after:modularmachinery;required-after:mmceguiext",
+    dependencies = "required-after:modularmachinery;required-after:mmceguiext@[1.3.0,)",
     acceptedMinecraftVersions = "[1.12.2]"
 )
 public class MMCEOneBlock {

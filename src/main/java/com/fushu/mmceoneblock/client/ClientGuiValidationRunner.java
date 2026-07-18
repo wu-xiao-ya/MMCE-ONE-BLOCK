@@ -3,10 +3,15 @@ package com.fushu.mmceoneblock.client;
 import com.fushu.mmceoneblock.MMCEOneBlock;
 import com.fushu.mmceoneblock.common.block.BlockSingleBlockMachineController;
 import com.fushu.mmceoneblock.common.container.ContainerSingleBlockController;
+import com.fushu.mmceoneblock.common.container.ContainerSingleBlockFactoryController;
 import com.fushu.mmceoneblock.common.network.GuiHandler;
 import com.fushu.mmceoneblock.common.registry.MachineRegistry;
+import com.fushu.mmceoneblock.common.tile.TileSingleBlockFactoryController;
 import com.fushu.mmceoneblock.common.tile.TileSingleBlockMachineController;
 import hellfirepvp.modularmachinery.common.block.BlockController;
+import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
+import hellfirepvp.modularmachinery.common.util.SmartInterfaceData;
+import hellfirepvp.modularmachinery.common.util.SmartInterfaceType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
@@ -18,6 +23,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.ScreenShotHelper;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.GameType;
 import net.minecraft.world.WorldServer;
@@ -31,6 +37,7 @@ import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,8 +45,15 @@ import java.util.UUID;
 public final class ClientGuiValidationRunner {
     private static final String ENABLE_PROPERTY = "mmceoneblock.clientGuiValidation";
     private static final String TARGET_ID = "starter_controller";
+    private static final String FACTORY_TARGET_ID = "factory_controller";
     private static final String EXPECTED_GUI = "com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable";
+    private static final String EXPECTED_FACTORY_GUI =
+        "com.fushu.mmceguiext.client.gui.GuiFactoryControllerResizable";
     private static final ResourceLocation EXPECTED_STYLE = new ResourceLocation("mmceoneblock", TARGET_ID);
+    private static final ResourceLocation EXPECTED_FACTORY_STYLE =
+        new ResourceLocation("mmceoneblock", FACTORY_TARGET_ID);
+    private static final String SMART_INTERFACE_KEY = "oneblock_smoke_target";
+    private static final float SMART_INTERFACE_VALUE = 42.0F;
     private static final int CLIENT_TILE_STABLE_TICKS = 40;
     private static boolean registered = false;
 
@@ -50,13 +64,18 @@ public final class ClientGuiValidationRunner {
     private boolean requestedGuiOpen;
     private boolean installedClientFallback;
     private boolean directFallbackGuiOpen;
+    private boolean validatingFactoryGui;
     private boolean done;
     private BlockPos pos;
     private UUID playerId;
     private int placedAt;
     private int openedAt;
     private int clientTileReadySince;
+    private int smartWriteRequestedAt;
     private TileSingleBlockMachineController clientFallbackTile;
+    private boolean smartWriteRequested;
+    private volatile boolean smartWriteVerified;
+    private volatile boolean smartWriteCheckScheduled;
     private volatile String asyncFailureReason = null;
 
     private ClientGuiValidationRunner() {
@@ -115,6 +134,11 @@ public final class ClientGuiValidationRunner {
             return;
         }
 
+        if (this.validatingFactoryGui) {
+            verifyFactoryDisplayedGui(mc);
+            return;
+        }
+
         if (!this.placedBlock) {
             if (!this.requestedServerPlacement) {
                 requestServerPlacement(mc);
@@ -164,6 +188,9 @@ public final class ClientGuiValidationRunner {
                 return;
             }
             WorldServer world = player.getServerWorld();
+            if (!ensureSmokeSmartInterfaceType(block)) {
+                return;
+            }
 
             world.setBlockToAir(this.pos);
             net.minecraft.block.state.IBlockState oldState = world.getBlockState(this.pos);
@@ -355,6 +382,11 @@ public final class ClientGuiValidationRunner {
             fail("unexpected_style:" + style);
             return false;
         }
+        if (tile.getCustomDataTag().getLong("oneblock.component.energy_in.capacity") != 1000L) {
+            fail("unexpected_dynamic_capacity:"
+                + tile.getCustomDataTag().getLong("oneblock.component.energy_in.capacity"));
+            return false;
+        }
         return true;
     }
 
@@ -404,17 +436,25 @@ public final class ClientGuiValidationRunner {
             fail("blueprint_slot_unexpected:" + className(blueprint));
             return;
         }
-        if (internal == null || !internal.getClass().getName().endsWith("$SlotInternalItem")) {
+        if (internal == null || !internal.getClass().getName().endsWith("$MachineSlot")) {
             fail("internal_slot_unexpected:" + className(internal));
+            return;
+        }
+        if (blueprint.xPos != 151 || blueprint.yPos != 8 || internal.xPos != 8 || internal.yPos != 17) {
+            fail("slot_layout_unexpected:blueprint=" + blueprint.xPos + "," + blueprint.yPos
+                + ":internal=" + internal.xPos + "," + internal.yPos);
             return;
         }
         if (!verifyRuntimeStyle(screen)) {
             return;
         }
+        if (!verifySmartInterfaceWrite(screen)) {
+            return;
+        }
 
-        this.done = true;
+        captureValidationScreenshot(TARGET_ID);
         MMCEOneBlock.log.info(
-            "[MMCE One Block ClientGuiValidation] PASS id={} screen={} container={} slotCount={} blueprintSlot={} firstInternalSlot={} guiStyle={} openMode={} styleRuntime=true styleText=smoke_title styleButton=smoke_cycle styleProgress=smoke_progress styleDynamic=smoke_progress_fill displayed=true",
+            "[MMCE One Block ClientGuiValidation] PASS id={} screen={} container={} slotCount={} blueprintSlot={} firstInternalSlot={} guiStyle={} openMode={} styleRuntime=true styleEvidence=starter_style_dynamic_capacity_and_smart_write smartKey={} smartValue={} displayed=true",
             TARGET_ID,
             screenName,
             container.getClass().getName(),
@@ -422,8 +462,247 @@ public final class ClientGuiValidationRunner {
             blueprintSlot,
             firstInternalSlot,
             EXPECTED_STYLE,
-            this.directFallbackGuiOpen ? "directFallback" : "serverGuiHandler"
+            this.directFallbackGuiOpen ? "directFallback" : "serverGuiHandler",
+            SMART_INTERFACE_KEY,
+            SMART_INTERFACE_VALUE
         );
+        startFactoryGuiValidation(mc);
+    }
+
+    private boolean ensureSmokeSmartInterfaceType(BlockSingleBlockMachineController block) {
+        if (block.getDefinition() == null) {
+            this.asyncFailureReason = "smart_interface_definition_missing";
+            return false;
+        }
+        DynamicMachine machine = hellfirepvp.modularmachinery.common.machine.MachineRegistry
+            .getRegistry()
+            .getMachine(block.getDefinition().getMachine());
+        if (machine == null) {
+            this.asyncFailureReason = "smart_interface_backing_machine_missing";
+            return false;
+        }
+        if (!machine.hasSmartInterfaceType(SMART_INTERFACE_KEY)) {
+            machine.addSmartInterfaceType(new SmartInterfaceType(SMART_INTERFACE_KEY, 0.0F));
+        }
+        return true;
+    }
+
+    private boolean verifySmartInterfaceWrite(GuiScreen screen) {
+        if (!this.smartWriteRequested) {
+            try {
+                Object button = findStyleEntry(screen, "customButtons", "id", "smoke_smart_set");
+                if (button == null) {
+                    fail("runtime_smart_button_missing");
+                    return false;
+                }
+                Method activate = findMethod(screen.getClass(), "activateCustomButton", button.getClass());
+                activate.setAccessible(true);
+                activate.invoke(screen, button);
+                this.smartWriteRequested = true;
+                this.smartWriteRequestedAt = this.ticks;
+                MMCEOneBlock.log.info(
+                    "[MMCE One Block ClientGuiValidation] requested virtual Smart Interface write key={} value={}",
+                    SMART_INTERFACE_KEY,
+                    SMART_INTERFACE_VALUE
+                );
+            } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
+                fail("runtime_smart_write_exception="
+                    + ex.getClass().getName() + ":" + ex.getMessage());
+            }
+            return false;
+        }
+        if (this.smartWriteVerified) {
+            return true;
+        }
+        if (!this.smartWriteCheckScheduled && this.ticks - this.smartWriteRequestedAt >= 5) {
+            requestServerSmartWriteCheck();
+        }
+        if (this.ticks - this.smartWriteRequestedAt > 160) {
+            fail("runtime_smart_write_not_observed");
+        }
+        return false;
+    }
+
+    private void requestServerSmartWriteCheck() {
+        MinecraftServer server = FMLCommonHandler.instance().getMinecraftServerInstance();
+        if (server == null || this.pos == null) {
+            return;
+        }
+        this.smartWriteCheckScheduled = true;
+        server.addScheduledTask(() -> {
+            try {
+                EntityPlayerMP player = serverPlayer(server);
+                if (player == null || this.pos == null) {
+                    this.smartWriteCheckScheduled = false;
+                    return;
+                }
+                TileEntity tile = player.getServerWorld().getTileEntity(this.pos);
+                if (!(tile instanceof TileSingleBlockMachineController)) {
+                    this.asyncFailureReason = "smart_write_server_tile_unexpected:" + className(tile);
+                    return;
+                }
+                SmartInterfaceData data = ((TileSingleBlockMachineController) tile)
+                    .getSmartInterfaceData(SMART_INTERFACE_KEY);
+                if (data != null && Math.abs(data.getValue() - SMART_INTERFACE_VALUE) <= 0.0001F) {
+                    this.smartWriteVerified = true;
+                    MMCEOneBlock.log.info(
+                        "[MMCE One Block ClientGuiValidation] verified virtual Smart Interface write key={} value={}",
+                        SMART_INTERFACE_KEY,
+                        data.getValue()
+                    );
+                } else {
+                    this.smartWriteCheckScheduled = false;
+                }
+            } catch (RuntimeException ex) {
+                this.asyncFailureReason = "smart_write_verify_exception="
+                    + ex.getClass().getName() + ":" + ex.getMessage();
+            }
+        });
+    }
+
+    private void startFactoryGuiValidation(Minecraft mc) {
+        BlockSingleBlockMachineController block = MachineRegistry.getBlock(FACTORY_TARGET_ID);
+        if (block == null || mc.world == null || mc.player == null || this.pos == null) {
+            fail("factory_validation_prerequisite_missing");
+            return;
+        }
+        BlockPos factoryPos = this.pos.add(2, 0, 0);
+        if (!mc.world.isBlockLoaded(factoryPos)) {
+            fail("factory_validation_chunk_missing");
+            return;
+        }
+        net.minecraft.block.state.IBlockState state = block.getDefaultState()
+            .withProperty(BlockController.FACING, EnumFacing.NORTH);
+        mc.world.setBlockState(factoryPos, state, 3);
+        TileEntity created = block.createTileEntity(mc.world, state);
+        if (!(created instanceof TileSingleBlockFactoryController)) {
+            fail("factory_fallback_tile_unexpected:" + className(created));
+            return;
+        }
+
+        TileSingleBlockFactoryController tile = (TileSingleBlockFactoryController) created;
+        tile.setWorld(mc.world);
+        tile.setPos(factoryPos);
+        tile.setDefinitionId(FACTORY_TARGET_ID);
+        tile.validate();
+        if (tile.provideMachineComponents().isEmpty()) {
+            fail("factory_components_missing");
+            return;
+        }
+        if (!EXPECTED_FACTORY_STYLE.equals(tile.getMachineControllerGuiStyle())) {
+            fail("factory_style_unexpected:" + tile.getMachineControllerGuiStyle());
+            return;
+        }
+        if (tile.getCustomDataTag().getLong("oneblock.component.energy_in.capacity") != 10000L) {
+            fail("factory_dynamic_capacity_unexpected:"
+                + tile.getCustomDataTag().getLong("oneblock.component.energy_in.capacity"));
+            return;
+        }
+        mc.world.setTileEntity(factoryPos, tile);
+        if (!(mc.world.getTileEntity(factoryPos) instanceof TileSingleBlockFactoryController)) {
+            mc.world.getChunk(factoryPos).addTileEntity(tile);
+        }
+
+        ContainerSingleBlockFactoryController container =
+            new ContainerSingleBlockFactoryController(tile, mc.player);
+        GuiScreen screen = ClientGuiBridge.createSingleBlockFactoryControllerGui(container);
+        if (screen == null) {
+            fail("factory_gui_missing");
+            return;
+        }
+        this.validatingFactoryGui = true;
+        this.openedAt = this.ticks;
+        mc.displayGuiScreen(screen);
+        MMCEOneBlock.log.info(
+            "[MMCE One Block ClientGuiValidation] requested direct factory GUI open id={} pos={}",
+            FACTORY_TARGET_ID,
+            factoryPos
+        );
+    }
+
+    private void verifyFactoryDisplayedGui(Minecraft mc) {
+        GuiScreen screen = mc.currentScreen;
+        if (screen == null) {
+            if (this.ticks - this.openedAt > 160) {
+                fail("factory_screen_missing");
+            }
+            return;
+        }
+        String screenName = screen.getClass().getName();
+        if (!EXPECTED_FACTORY_GUI.equals(screenName)) {
+            if (this.ticks - this.openedAt > 160) {
+                fail("factory_screen_unexpected:" + screenName);
+            }
+            return;
+        }
+        if (!(screen instanceof GuiContainer)) {
+            fail("factory_screen_not_container:" + screenName);
+            return;
+        }
+
+        Container container = ((GuiContainer) screen).inventorySlots;
+        if (!(container instanceof ContainerSingleBlockFactoryController)) {
+            fail("factory_container_unexpected:" + className(container));
+            return;
+        }
+        int slotCount = container.inventorySlots.size();
+        int blueprintSlot = ContainerSingleBlockFactoryController.blueprintSlotIndex();
+        int firstInternalSlot = ContainerSingleBlockFactoryController.firstInternalSlotIndex();
+        if (slotCount <= firstInternalSlot) {
+            fail("factory_not_enough_slots:" + slotCount);
+            return;
+        }
+        Slot blueprint = container.inventorySlots.get(blueprintSlot);
+        Slot internal = container.inventorySlots.get(firstInternalSlot);
+        if (blueprint == null || !blueprint.getClass().getName().endsWith("$SlotBlueprint")
+            || internal == null || !internal.getClass().getName().endsWith("$MachineSlot")) {
+            fail("factory_slots_unexpected:blueprint=" + className(blueprint)
+                + ":internal=" + className(internal));
+            return;
+        }
+        if (blueprint.xPos != 255 || blueprint.yPos != 8 || internal.xPos != 112 || internal.yPos != 17) {
+            fail("factory_slot_layout_unexpected:blueprint=" + blueprint.xPos + "," + blueprint.yPos
+                + ":internal=" + internal.xPos + "," + internal.yPos);
+            return;
+        }
+        if (!verifyFactoryRuntimeStyle(screen)) {
+            return;
+        }
+
+        captureValidationScreenshot(FACTORY_TARGET_ID);
+        this.done = true;
+        MMCEOneBlock.log.info(
+            "[MMCE One Block ClientGuiValidation] PASS id={} screen={} container={} slotCount={} blueprintSlot={} firstInternalSlot={} guiStyle={} openMode=directFallback styleRuntime=true styleEvidence=factory_style displayed=true",
+            FACTORY_TARGET_ID,
+            screenName,
+            container.getClass().getName(),
+            slotCount,
+            blueprintSlot,
+            firstInternalSlot,
+            EXPECTED_FACTORY_STYLE
+        );
+    }
+
+    private void captureValidationScreenshot(String targetId) {
+        try {
+            Minecraft minecraft = Minecraft.getMinecraft();
+            ScreenShotHelper.saveScreenshot(
+                minecraft.gameDir,
+                minecraft.displayWidth,
+                minecraft.displayHeight,
+                minecraft.getFramebuffer()
+            );
+            MMCEOneBlock.log.info(
+                "[MMCE One Block ClientGuiValidation] screenshot saved under {} for id={}",
+                new java.io.File(minecraft.gameDir, "screenshots").getAbsolutePath(),
+                targetId
+            );
+        } catch (RuntimeException error) {
+            MMCEOneBlock.log.warn(
+                "[MMCE One Block ClientGuiValidation] screenshot capture failed: {}",
+                error.toString()
+            );
+        }
     }
 
     private boolean verifyRuntimeStyle(GuiScreen screen) {
@@ -445,6 +724,20 @@ public final class ClientGuiValidationRunner {
                 fail("runtime_style_button_missing");
                 return false;
             }
+            Object smartButton = findStyleEntry(style, "buttons", "id", "smoke_smart_set");
+            if (smartButton == null
+                || !"smart_set".equals(readField(smartButton, "action"))
+                || !SMART_INTERFACE_KEY.equals(readField(smartButton, "key"))) {
+                fail("runtime_style_smart_button_missing");
+                return false;
+            }
+            Object smartEditor =
+                findStyleEntry(style, "smartInterfaceEditors", "id", "smoke_smart_input");
+            if (smartEditor == null
+                || !SMART_INTERFACE_KEY.equals(readField(smartEditor, "virtualKey"))) {
+                fail("runtime_style_smart_editor_missing");
+                return false;
+            }
             if (findStyleEntry(style, "progressBars", "id", "smoke_progress") == null
                 || findStyleEntry(style, "progressBars", "source", "machine_progress") == null) {
                 fail("runtime_style_progress_missing");
@@ -458,7 +751,12 @@ public final class ClientGuiValidationRunner {
             }
             Object source = readField(dynamic, "source");
             Object renderer = readField(dynamic, "renderer");
-            if (!"recipeProgress".equals(readField(source, "metric"))
+            Object maxSource = readField(source, "maxSource");
+            if (!"customData".equals(readField(source, "type"))
+                || !"oneblock.component.energy_in.amount".equals(readField(source, "key"))
+                || maxSource == null
+                || !"customData".equals(readField(maxSource, "type"))
+                || !"oneblock.component.energy_in.capacity".equals(readField(maxSource, "key"))
                 || !"fill".equals(readField(renderer, "type"))
                 || !"right".equals(readField(renderer, "direction"))) {
                 fail("runtime_style_dynamic_unexpected");
@@ -467,6 +765,33 @@ public final class ClientGuiValidationRunner {
             return true;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
             fail("runtime_style_exception=" + ex.getClass().getName() + ":" + ex.getMessage());
+            return false;
+        }
+    }
+
+    private boolean verifyFactoryRuntimeStyle(GuiScreen screen) {
+        try {
+            Object style = readField(screen, "styleOverride");
+            if (style == null) {
+                fail("factory_runtime_style_missing");
+                return false;
+            }
+            if (findStyleEntry(style, "texts", "id", "factory_title") == null
+                || findStyleEntry(style, "texts", "value", "One Block Factory") == null) {
+                fail("factory_runtime_style_text_missing");
+                return false;
+            }
+            Object button = findStyleEntry(style, "buttons", "id", "open_factory_threads");
+            if (button == null
+                || !"subgui".equals(readField(button, "action"))
+                || !"factory_threads".equals(readField(button, "targetSubGui"))) {
+                fail("factory_runtime_style_button_missing");
+                return false;
+            }
+            return true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
+            fail("factory_runtime_style_exception="
+                + ex.getClass().getName() + ":" + ex.getMessage());
             return false;
         }
     }
@@ -505,6 +830,20 @@ public final class ClientGuiValidationRunner {
             }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    private static Method findMethod(Class<?> type,
+                                     String name,
+                                     Class<?> parameterType) throws NoSuchMethodException {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredMethod(name, parameterType);
+            } catch (NoSuchMethodException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchMethodException(name);
     }
 
     private TileSingleBlockMachineController getTile(Minecraft mc) {

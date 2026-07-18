@@ -16,21 +16,29 @@ if (-not (Test-Path -LiteralPath $LogPath)) {
 }
 
 $log = Get-Content -LiteralPath $LogPath -Raw
+$machineCount = [int](& (Join-Path $scriptDir 'Get-SmokeMachineCount.ps1'))
 $required = @(
     'LWJGL Version',
     'MinecraftForge v',
-    'Loaded 1 one-block machine definition(s)',
-    'Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)',
+    "Loaded $machineCount one-block machine definition(s)",
+    "Validated $machineCount one-block machine definition(s) against loaded MMCE machines (0 missing, 0 mismatched)",
     'Forge Mod Loader has successfully loaded',
     'mmceoneblock',
     'mmceguiext'
 )
 if ($RequireGuiValidation) {
     $required += '[MMCE One Block ClientGuiValidation] PASS id=starter_controller'
+    $required += '[MMCE One Block ClientGuiValidation] PASS id=factory_controller'
     $required += 'screen=com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable'
+    $required += 'screen=com.fushu.mmceguiext.client.gui.GuiFactoryControllerResizable'
     $required += 'container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockController'
+    $required += 'container=com.fushu.mmceoneblock.common.container.ContainerSingleBlockFactoryController'
     $required += 'styleRuntime=true'
+    $required += 'verified virtual Smart Interface write key=oneblock_smoke_target value=42.0'
     $required += 'displayed=true'
+    $required += 'screenshot saved under'
+    $required += 'for id=starter_controller'
+    $required += 'for id=factory_controller'
 }
 
 foreach ($needle in $required) {

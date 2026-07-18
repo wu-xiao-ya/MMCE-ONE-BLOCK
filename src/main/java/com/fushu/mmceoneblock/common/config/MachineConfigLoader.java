@@ -17,10 +17,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -32,6 +34,8 @@ public final class MachineConfigLoader {
     private static final long MAX_CONFIG_BYTES = 1024L * 1024L;
     private static final int MAX_ITEM_SLOTS = 4096;
     private static final long MAX_COMPONENT_CAPACITY = Integer.MAX_VALUE;
+    private static final String RESOURCE_NAMESPACE_PATTERN = "[a-z0-9_.-]+";
+    private static final String RESOURCE_PATH_PATTERN = "[a-z0-9/._-]+";
 
     private MachineConfigLoader() {
     }
@@ -107,14 +111,18 @@ public final class MachineConfigLoader {
             MachineBlockDefinition block = parseBlock(root, file);
             List<MachineComponentDefinition> components = parseComponents(root, file);
             String guiStyle = parseGuiStyle(root, id, file);
+            ControllerType controllerType = parseControllerType(root, id, file);
+            String factoryGuiStyle = parseOptionalStyle(root, file, "factoryGuiStyle");
 
             validateComponents(components, file);
             if (!enabled) {
                 LOGGER.info("Skipping disabled machine definition {} from {}", id, file);
-                return new MachineDefinition(id, machine, false, displayName, block, components, guiStyle, file);
+                return new MachineDefinition(id, machine, false, displayName, block, components, guiStyle, file,
+                    controllerType, factoryGuiStyle);
             }
 
-            return new MachineDefinition(id, machine, true, displayName, block, components, guiStyle, file);
+            return new MachineDefinition(id, machine, true, displayName, block, components, guiStyle, file,
+                controllerType, factoryGuiStyle);
         } catch (MachineConfigException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -167,10 +175,184 @@ public final class MachineConfigLoader {
             throw new MachineConfigException("Machine config " + file + " is missing block");
         }
         String model = requireString(blockNode, file, "model");
-        String texture = requireString(blockNode, file, "texture");
         validateResourceLocation(model, file, "block.model");
-        validateResourceLocation(texture, file, "block.texture");
-        return new MachineBlockDefinition(model, texture);
+        Map<String, String> textures = parseTextureSlots(blockNode, file, "block");
+        String legacyTexture = getOptionalString(blockNode, file, "texture");
+        if (legacyTexture != null && !legacyTexture.trim().isEmpty()) {
+            validateResourceLocation(legacyTexture, file, "block.texture");
+            String previous = textures.put("all", legacyTexture.trim().toLowerCase(Locale.ROOT));
+            if (previous != null && !previous.equalsIgnoreCase(legacyTexture.trim())) {
+                throw new MachineConfigException(
+                    "Machine config " + file + " has conflicting block.texture and block.textures.all"
+                );
+            }
+        }
+        if (textures.isEmpty()) {
+            throw new MachineConfigException("Machine config " + file + " is missing block.texture or block.textures");
+        }
+
+        String itemModel = getOptionalString(blockNode, file, "itemModel");
+        if (itemModel != null && !itemModel.trim().isEmpty()) {
+            validateResourceLocation(itemModel, file, "block.itemModel");
+            itemModel = itemModel.trim().toLowerCase(Locale.ROOT);
+        } else {
+            itemModel = null;
+        }
+
+        Map<MachineBlockDefinition.RenderState, MachineBlockDefinition.ModelVariant> states =
+            parseStateVariants(blockNode, file);
+        List<MachineBlockDefinition.TextureLevel> textureLevels = parseTextureLevels(blockNode, file);
+        return new MachineBlockDefinition(model.trim().toLowerCase(Locale.ROOT), itemModel, textures, states, textureLevels);
+    }
+
+    private static Map<String, String> parseTextureSlots(JsonObject node, Path file, String scope) {
+        Map<String, String> out = new LinkedHashMap<String, String>();
+        if (node == null || !node.has("textures")) {
+            return out;
+        }
+        JsonElement textureElement = node.get("textures");
+        if (!textureElement.isJsonObject()) {
+            throw new MachineConfigException("Machine config " + file + " has an invalid " + scope + ".textures; expected an object");
+        }
+        JsonObject textureNode = textureElement.getAsJsonObject();
+        for (Map.Entry<String, JsonElement> entry : textureNode.entrySet()) {
+            String slot = entry.getKey() == null ? "" : entry.getKey().trim();
+            JsonElement value = entry.getValue();
+            if (slot.isEmpty() || !slot.matches("[A-Za-z0-9_./-]+")) {
+                throw new MachineConfigException("Machine config " + file + " has an invalid " + scope + ".textures slot '" + entry.getKey() + "'");
+            }
+            if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()
+                || value.getAsString().trim().isEmpty()) {
+                throw new MachineConfigException("Machine config " + file + " has an invalid " + scope + ".textures." + slot);
+            }
+            String texture = value.getAsString().trim().toLowerCase(Locale.ROOT);
+            validateResourceLocation(texture, file, scope + ".textures." + slot);
+            out.put(slot, texture);
+        }
+        return out;
+    }
+
+    private static Map<MachineBlockDefinition.RenderState, MachineBlockDefinition.ModelVariant> parseStateVariants(
+        JsonObject blockNode,
+        Path file
+    ) {
+        JsonObject stateNode = getObject(blockNode, "states");
+        if (blockNode != null && blockNode.has("states") && stateNode == null) {
+            throw new MachineConfigException("Machine config " + file + " has an invalid block.states; expected an object");
+        }
+        Map<MachineBlockDefinition.RenderState, MachineBlockDefinition.ModelVariant> out =
+            new LinkedHashMap<MachineBlockDefinition.RenderState, MachineBlockDefinition.ModelVariant>();
+        if (stateNode == null) {
+            return out;
+        }
+        for (Map.Entry<String, JsonElement> entry : stateNode.entrySet()) {
+            MachineBlockDefinition.RenderState state = parseRenderState(entry.getKey(), file);
+            if (entry.getValue() == null || !entry.getValue().isJsonObject()) {
+                throw new MachineConfigException("Machine config " + file + " has an invalid block.states." + entry.getKey());
+            }
+            JsonObject variantNode = entry.getValue().getAsJsonObject();
+            String model = getOptionalString(variantNode, file, "model");
+            if (model != null && !model.trim().isEmpty()) {
+                validateResourceLocation(model, file, "block.states." + entry.getKey() + ".model");
+                model = model.trim().toLowerCase(Locale.ROOT);
+            } else {
+                model = null;
+            }
+            Map<String, String> textures = parseTextureSlots(variantNode, file, "block.states." + entry.getKey());
+            String legacyTexture = getOptionalString(variantNode, file, "texture");
+            if (legacyTexture != null && !legacyTexture.trim().isEmpty()) {
+                validateResourceLocation(legacyTexture, file, "block.states." + entry.getKey() + ".texture");
+                String previous = textures.put("all", legacyTexture.trim().toLowerCase(Locale.ROOT));
+                if (previous != null && !previous.equalsIgnoreCase(legacyTexture.trim())) {
+                    throw new MachineConfigException(
+                        "Machine config " + file + " has conflicting texture aliases in block.states." + entry.getKey()
+                    );
+                }
+            }
+            if (model == null && textures.isEmpty()) {
+                throw new MachineConfigException(
+                    "Machine config " + file + " block.states." + entry.getKey() + " must define model or textures"
+                );
+            }
+            out.put(state, new MachineBlockDefinition.ModelVariant(model, textures));
+        }
+        return out;
+    }
+
+    private static MachineBlockDefinition.RenderState parseRenderState(String raw, Path file) {
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        if ("unformed".equals(normalized)) {
+            return MachineBlockDefinition.RenderState.UNFORMED;
+        }
+        if ("idle".equals(normalized)) {
+            return MachineBlockDefinition.RenderState.IDLE;
+        }
+        if ("working".equals(normalized)) {
+            return MachineBlockDefinition.RenderState.WORKING;
+        }
+        throw new MachineConfigException("Machine config " + file + " has an invalid block state '" + raw + "'");
+    }
+
+    private static List<MachineBlockDefinition.TextureLevel> parseTextureLevels(JsonObject blockNode, Path file) {
+        JsonArray levels = getArray(blockNode, "textureLevels");
+        if (blockNode != null && blockNode.has("textureLevels") && levels == null) {
+            throw new MachineConfigException("Machine config " + file + " has an invalid block.textureLevels; expected an array");
+        }
+        if (levels == null) {
+            return Collections.emptyList();
+        }
+        List<MachineBlockDefinition.TextureLevel> out = new ArrayList<MachineBlockDefinition.TextureLevel>();
+        Set<String> seen = new HashSet<String>();
+        for (int index = 0; index < levels.size(); index++) {
+            JsonElement element = levels.get(index);
+            if (element == null || !element.isJsonObject()) {
+                throw new MachineConfigException("Machine config " + file + " has an invalid block.textureLevels entry at index " + index);
+            }
+            JsonObject levelNode = element.getAsJsonObject();
+            String content = requireString(levelNode, file, "content").toLowerCase(Locale.ROOT);
+            if (!"fluid".equals(content) && !"gas".equals(content) && !"energy".equals(content)) {
+                throw new MachineConfigException("Machine config " + file + " has an invalid block.textureLevels content '" + content + "'");
+            }
+            JsonElement ratioNode = levelNode.get("minFillRatio");
+            if (ratioNode == null || !ratioNode.isJsonPrimitive() || !ratioNode.getAsJsonPrimitive().isNumber()) {
+                throw new MachineConfigException("Machine config " + file + " is missing block.textureLevels.minFillRatio at index " + index);
+            }
+            double minFillRatio = ratioNode.getAsDouble();
+            if (Double.isNaN(minFillRatio) || Double.isInfinite(minFillRatio) || minFillRatio < 0.0D || minFillRatio > 1.0D) {
+                throw new MachineConfigException("Machine config " + file + " has block.textureLevels.minFillRatio outside 0..1 at index " + index);
+            }
+            String model = getOptionalString(levelNode, file, "model");
+            if (model != null && !model.trim().isEmpty()) {
+                validateResourceLocation(model, file, "block.textureLevels.model");
+                model = model.trim().toLowerCase(Locale.ROOT);
+            } else {
+                model = null;
+            }
+            Map<String, String> textures = parseTextureSlots(levelNode, file, "block.textureLevels");
+            String legacyTexture = getOptionalString(levelNode, file, "texture");
+            if (legacyTexture != null && !legacyTexture.trim().isEmpty()) {
+                validateResourceLocation(legacyTexture, file, "block.textureLevels.texture");
+                String previous = textures.put("all", legacyTexture.trim().toLowerCase(Locale.ROOT));
+                if (previous != null && !previous.equalsIgnoreCase(legacyTexture.trim())) {
+                    throw new MachineConfigException(
+                        "Machine config " + file + " has conflicting texture aliases in block.textureLevels at index " + index
+                    );
+                }
+            }
+            if (model == null && textures.isEmpty()) {
+                throw new MachineConfigException(
+                    "Machine config " + file + " block.textureLevels entry " + index + " must define model or textures"
+                );
+            }
+            String key = content + "|" + minFillRatio;
+            if (!seen.add(key)) {
+                throw new MachineConfigException(
+                    "Machine config " + file + " contains duplicate block.textureLevels entry for " + content + " at " + minFillRatio
+                );
+            }
+            out.add(new MachineBlockDefinition.TextureLevel(content, minFillRatio, model, textures));
+        }
+        return out;
     }
 
     private static List<MachineComponentDefinition> parseComponents(JsonObject root, Path file) {
@@ -180,6 +362,7 @@ public final class MachineConfigLoader {
         }
 
         List<MachineComponentDefinition> out = new ArrayList<MachineComponentDefinition>();
+        Map<String, Integer> legacyTypeCounts = new LinkedHashMap<String, Integer>();
         for (int i = 0; i < array.size(); i++) {
             JsonElement element = array.get(i);
             if (element == null || element.isJsonNull()) {
@@ -187,16 +370,36 @@ public final class MachineConfigLoader {
             }
 
             if (element.isJsonPrimitive()) {
-                String type = MachineComponentTypes.normalize(element.getAsString());
-                if (type.isEmpty()) {
-                    throw new MachineConfigException("Machine config " + file + " has an empty component type at index " + i);
-                }
-                if (!MachineComponentTypes.isKnown(type)) {
+                if (!element.getAsJsonPrimitive().isString()) {
                     throw new MachineConfigException(
-                        "Machine config " + file + " has an illegal component type '" + element.getAsString() + "' at index " + i
+                        "Machine config " + file + " has an invalid legacy component at index " + i
                     );
                 }
-                out.add(new MachineComponentDefinition(type, null, true, null, new JsonObject()));
+                String normalizedType = MachineComponentTypes.normalize(element.getAsString());
+                if (!MachineComponentTypes.isKnown(normalizedType)) {
+                    throw new MachineConfigException(
+                        "Machine config " + file + " has an illegal component type '"
+                            + element.getAsString() + "' at index " + i
+                    );
+                }
+                int occurrence = legacyTypeCounts.containsKey(normalizedType)
+                    ? legacyTypeCounts.get(normalizedType).intValue() + 1
+                    : 1;
+                legacyTypeCounts.put(normalizedType, Integer.valueOf(occurrence));
+                String generatedId = occurrence == 1 ? normalizedType : normalizedType + "_" + occurrence;
+                JsonObject raw = new JsonObject();
+                raw.addProperty("type", normalizedType);
+                out.add(new MachineComponentDefinition(
+                    normalizedType,
+                    generatedId,
+                    true,
+                    null,
+                    MachineComponentTypes.kind(normalizedType),
+                    MachineComponentTypes.ioFromType(normalizedType),
+                    null,
+                    null,
+                    raw
+                ));
                 continue;
             }
 
@@ -215,25 +418,50 @@ public final class MachineConfigLoader {
             boolean enabled = getBoolean(component, true, "enabled", file);
             String id = getOptionalString(component, file, "id");
             String displayName = getOptionalString(component, file, "displayName");
-            if (id != null && id.trim().isEmpty()) {
-                throw new MachineConfigException("Machine config " + file + " has an empty component id at index " + i);
+            if (id == null || id.trim().isEmpty()) {
+                throw new MachineConfigException(
+                    "Machine config " + file + " is missing required component id at index " + i
+                );
             }
-            out.add(new MachineComponentDefinition(normalizedType, id, enabled, displayName, component));
+            id = normalizeComponentId(id, file, i);
+            String kind = MachineComponentTypes.kind(normalizedType);
+            String io = parseComponentIo(component, file, i, normalizedType);
+            Integer slots = parseComponentSlots(component, kind, file, i);
+            Long capacity = parseComponentCapacity(component, kind, file, i);
+            out.add(new MachineComponentDefinition(
+                normalizedType,
+                id,
+                enabled,
+                displayName,
+                kind,
+                io,
+                slots,
+                capacity,
+                component
+            ));
         }
         return out;
     }
 
+    private static ControllerType parseControllerType(JsonObject root, String id, Path file) {
+        String raw = getOptionalString(root, file, "controllerType");
+        if (raw == null || raw.trim().isEmpty()) {
+            return ControllerType.AUTO;
+        }
+        ControllerType parsed = ControllerType.fromString(raw);
+        if (parsed == ControllerType.AUTO && !"auto".equals(raw.trim().toLowerCase(Locale.ROOT))) {
+            throw new MachineConfigException("Machine config " + file + " has an illegal controllerType '" + raw + "'");
+        }
+        return parsed;
+    }
+
+    private static String parseOptionalString(JsonObject obj, Path file, String key) {
+        String value = getOptionalString(obj, file, key);
+        return value == null ? null : value.trim();
+    }
+
     private static String parseGuiStyle(JsonObject root, String id, Path file) {
-        String guiStyle = getOptionalString(root, file, "guiStyle");
-        if (guiStyle == null || guiStyle.trim().isEmpty()) {
-            return new ResourceLocation(MODID, id).toString();
-        }
-        String normalized = guiStyle.trim().toLowerCase(Locale.ROOT);
-        try {
-            return new ResourceLocation(normalized).toString();
-        } catch (Exception ex) {
-            throw new MachineConfigException("Machine config " + file + " has an illegal guiStyle '" + guiStyle + "'", ex);
-        }
+        return parseStyle(root, file, "guiStyle", new ResourceLocation(MODID, id).toString(), true);
     }
 
     private static void validateComponents(List<MachineComponentDefinition> components, Path file) {
@@ -241,27 +469,39 @@ public final class MachineConfigLoader {
         boolean hasEnabledRuntimeComponent = false;
         for (int i = 0; i < components.size(); i++) {
             MachineComponentDefinition component = components.get(i);
-            if (component == null || !component.isEnabled()) {
+            if (component == null) {
                 continue;
             }
             String id = component.getId();
             if (id == null || id.trim().isEmpty()) {
-                id = null;
-            } else {
-                String normalized = normalizeId(id);
-                Integer previousIndex = seen.get(normalized);
-                if (previousIndex != null) {
-                    throw new MachineConfigException(
-                        "Machine config " + file + " contains duplicate component id '" + id + "' at indexes " + previousIndex + " and " + i
-                    );
-                }
-                seen.put(normalized, i);
-            }
-            String kind = MachineComponentTypes.kind(component.getType());
-            if (!MachineComponentTypes.isRuntimeSupported(component.getType())) {
                 throw new MachineConfigException(
-                    "Machine config " + file + " has unsupported v1 component type '" + component.getType() + "' at index " + i
+                    "Machine config " + file + " is missing required component id at index " + i
                 );
+            }
+            String normalized = normalizeComponentId(id, file, i);
+            Integer previousIndex = seen.get(normalized);
+            if (previousIndex != null) {
+                throw new MachineConfigException(
+                    "Machine config " + file + " contains duplicate component id '" + id
+                        + "' at indexes " + previousIndex + " and " + i
+                );
+            }
+            seen.put(normalized, i);
+            String kind = component.getKind() == null || component.getKind().trim().isEmpty()
+                ? MachineComponentTypes.kind(component.getType())
+                : component.getKind();
+            if (!MachineComponentTypes.isRuntimeSupported(component.getType())) {
+                String alternative = MachineComponentTypes.isReservedUnsupported(component.getType())
+                    ? "; reserved for a later MMCEGE special-component API, "
+                        + MachineComponentTypes.unsupportedAlternative(component.getType())
+                    : "";
+                throw new MachineConfigException(
+                    "Machine config " + file + " has unsupported 0.1.0 component type '"
+                        + component.getType() + "' at index " + i + alternative
+                );
+            }
+            if (!component.isEnabled()) {
+                continue;
             }
             validateComponentIo(component, file, i);
             validateComponentCapacity(component, kind, file, i);
@@ -275,8 +515,7 @@ public final class MachineConfigLoader {
 
     private static void validateComponentIo(MachineComponentDefinition component, Path file, int index) {
         String suffixIo = MachineComponentTypes.ioFromType(component.getType());
-        JsonObject raw = component.getRaw();
-        String rawIo = getOptionalIo(raw, file, index);
+        String rawIo = component.getIo();
         if (suffixIo != null && rawIo != null && !suffixIo.equals(rawIo)) {
             throw new MachineConfigException(
                 "Machine config " + file + " has conflicting io '" + rawIo + "' for component type '" + component.getType()
@@ -286,23 +525,10 @@ public final class MachineConfigLoader {
     }
 
     private static void validateComponentCapacity(MachineComponentDefinition component, String kind, Path file, int index) {
-        if ("item".equals(kind)) {
+        if ("item".equals(kind) || component.getCapacity() == null) {
             return;
         }
-        JsonObject raw = component.getRaw();
-        if (raw == null || !raw.has("capacity") || raw.get("capacity").isJsonNull()) {
-            return;
-        }
-        JsonElement element = raw.get("capacity");
-        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            throw new MachineConfigException("Machine config " + file + " has an invalid capacity at component index " + index);
-        }
-        long capacity;
-        try {
-            capacity = element.getAsLong();
-        } catch (NumberFormatException ex) {
-            throw new MachineConfigException("Machine config " + file + " has an invalid capacity at component index " + index, ex);
-        }
+        long capacity = component.getCapacity().longValue();
         if (capacity < 1L || capacity > MAX_COMPONENT_CAPACITY) {
             throw new MachineConfigException(
                 "Machine config " + file + " has capacity out of range at component index " + index
@@ -312,9 +538,42 @@ public final class MachineConfigLoader {
     }
 
     private static void validateComponentSlots(MachineComponentDefinition component, String kind, Path file, int index) {
-        JsonObject raw = component.getRaw();
-        if (raw == null || !raw.has("slots") || raw.get("slots").isJsonNull()) {
+        if (!"item".equals(kind)) {
+            if (component.getSlots() != null) {
+                throw new MachineConfigException("Machine config " + file + " may only set slots on item components at index " + index);
+            }
             return;
+        }
+        Integer slotsValue = component.getSlots();
+        if (slotsValue == null) {
+            return;
+        }
+        int slots = slotsValue.intValue();
+        if (slots < 1 || slots > MAX_ITEM_SLOTS) {
+            throw new MachineConfigException(
+                "Machine config " + file + " has slots out of range at component index " + index
+                    + ": " + slots + " (allowed 1.." + MAX_ITEM_SLOTS + ")"
+            );
+        }
+    }
+
+    @Nullable
+    private static String parseComponentIo(JsonObject raw, Path file, int index, String normalizedType) {
+        String suffixIo = MachineComponentTypes.ioFromType(normalizedType);
+        String explicitIo = getOptionalIo(raw, file, index);
+        if (suffixIo != null && explicitIo != null && !suffixIo.equals(explicitIo)) {
+            throw new MachineConfigException(
+                "Machine config " + file + " has conflicting io '" + explicitIo + "' for component type '" + normalizedType
+                    + "' at index " + index
+            );
+        }
+        return explicitIo == null ? suffixIo : explicitIo;
+    }
+
+    @Nullable
+    private static Integer parseComponentSlots(JsonObject raw, String kind, Path file, int index) {
+        if (raw == null || !raw.has("slots") || raw.get("slots").isJsonNull()) {
+            return null;
         }
         if (!"item".equals(kind)) {
             throw new MachineConfigException("Machine config " + file + " may only set slots on item components at index " + index);
@@ -335,6 +594,34 @@ public final class MachineConfigLoader {
                     + ": " + slots + " (allowed 1.." + MAX_ITEM_SLOTS + ")"
             );
         }
+        return Integer.valueOf(slots);
+    }
+
+    @Nullable
+    private static Long parseComponentCapacity(JsonObject raw, String kind, Path file, int index) {
+        if (raw == null || !raw.has("capacity") || raw.get("capacity").isJsonNull()) {
+            return null;
+        }
+        if ("item".equals(kind)) {
+            return null;
+        }
+        JsonElement element = raw.get("capacity");
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new MachineConfigException("Machine config " + file + " has an invalid capacity at component index " + index);
+        }
+        long capacity;
+        try {
+            capacity = element.getAsLong();
+        } catch (NumberFormatException ex) {
+            throw new MachineConfigException("Machine config " + file + " has an invalid capacity at component index " + index, ex);
+        }
+        if (capacity < 1L || capacity > MAX_COMPONENT_CAPACITY) {
+            throw new MachineConfigException(
+                "Machine config " + file + " has capacity out of range at component index " + index
+                    + ": " + capacity + " (allowed 1.." + MAX_COMPONENT_CAPACITY + ")"
+            );
+        }
+        return Long.valueOf(capacity);
     }
 
     @Nullable
@@ -356,6 +643,30 @@ public final class MachineConfigLoader {
         throw new MachineConfigException(
             "Machine config " + file + " has an invalid io '" + rawIo + "' at component index " + index
         );
+    }
+
+    private static String parseStyle(JsonObject root, Path file, String key, String fallback, boolean required) {
+        String raw = getOptionalString(root, file, key);
+        if (raw == null || raw.trim().isEmpty()) {
+            if (!required) {
+                return fallback;
+            }
+            return validateStyleValue(fallback, file, key);
+        }
+        return validateStyleValue(raw, file, key);
+    }
+
+    @Nullable
+    private static String parseOptionalStyle(JsonObject root, Path file, String key) {
+        return parseStyle(root, file, key, null, false);
+    }
+
+    private static String validateStyleValue(String raw, Path file, String key) {
+        try {
+            return parseStrictResourceLocation(raw).toString();
+        } catch (Exception ex) {
+            throw new MachineConfigException("Machine config " + file + " has an illegal " + key + " '" + raw + "'", ex);
+        }
     }
 
     private static String requireString(JsonObject obj, Path file, String key) {
@@ -420,6 +731,19 @@ public final class MachineConfigLoader {
         return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
     }
 
+    private static String normalizeComponentId(String id, Path file, int index) {
+        String normalized = normalizeId(id);
+        if (normalized.isEmpty()
+            || !normalized.equals(stripNamespace(normalized))
+            || !normalized.matches(RESOURCE_PATH_PATTERN)) {
+            throw new MachineConfigException(
+                "Machine config " + file + " has an illegal path-only component id '"
+                    + id + "' at index " + index
+            );
+        }
+        return normalized;
+    }
+
     private static String stripNamespace(String id) {
         if (id == null) {
             return "";
@@ -430,9 +754,19 @@ public final class MachineConfigLoader {
 
     private static void validateResourceLocation(String value, Path file, String key) {
         try {
-            new ResourceLocation(value.trim().toLowerCase(Locale.ROOT));
+            parseStrictResourceLocation(value);
         } catch (Exception ex) {
             throw new MachineConfigException("Machine config " + file + " has an illegal " + key + " '" + value + "'", ex);
         }
+    }
+
+    private static ResourceLocation parseStrictResourceLocation(String raw) {
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        ResourceLocation location = new ResourceLocation(normalized);
+        if (!location.getNamespace().matches(RESOURCE_NAMESPACE_PATTERN)
+            || !location.getPath().matches(RESOURCE_PATH_PATTERN)) {
+            throw new IllegalArgumentException("Invalid resource location: " + raw);
+        }
+        return location;
     }
 }

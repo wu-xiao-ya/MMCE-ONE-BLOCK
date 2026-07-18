@@ -2,69 +2,124 @@ package com.fushu.mmceoneblock.api;
 
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collection;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public final class MMCEGEApiBridgeTest {
     @Test
-    public void publishesMmcegeComponentProviderApiBeforeLocalPackValidation() throws Exception {
+    public void requiresMmcegeVersionAndApiLevelOne() throws Exception {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        Class<?> provider = loader.loadClass("com.fushu.mmceguiext.api.machine.IMultiMachineComponentProvider");
+        Class<?> mod = loader.loadClass("com.fushu.mmceguiext.MMCEGuiExt");
+        Class<?> api = loader.loadClass("com.fushu.mmceguiext.MMCEGuiExtApi");
+
+        assertEquals("1.3.0", mod.getField("VERSION").get(null));
+        assertEquals(1, api.getField("API_LEVEL").getInt(null));
+        assertTrue(((Boolean) api.getMethod("isApiLevelAtLeast", Integer.TYPE)
+            .invoke(null, Integer.valueOf(1))).booleanValue());
+        assertFalse(((Boolean) api.getMethod("isApiLevelAtLeast", Integer.TYPE)
+            .invoke(null, Integer.valueOf(2))).booleanValue());
+    }
+
+    @Test
+    public void publishesOnlyStableMultiComponentProviderMethods() throws Exception {
+        Class<?> provider = Thread.currentThread().getContextClassLoader()
+            .loadClass("com.fushu.mmceguiext.api.machine.IMultiMachineComponentProvider");
 
         Method provide = provider.getMethod("provideMachineComponents");
         Method group = provider.getMethod("getMachineComponentGroupId");
-
         assertEquals(Collection.class, provide.getReturnType());
         assertEquals(Long.TYPE, group.getReturnType());
+        try {
+            provider.getMethod("provideComponents");
+            fail("legacy provideComponents alias must not remain in API level 1");
+        } catch (NoSuchMethodException expected) {
+            // Expected stable API surface.
+        }
     }
 
     @Test
-    public void exposesGuiStyleRegistrationMethods() throws Exception {
+    public void exposesGuiBridgeWithoutInternalGuiReturnTypes() throws Exception {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        Class<?> api = loader.loadClass("com.fushu.mmceguiext.api.gui.MachineGuiStyleApi");
-        Class<?> resourceLocation = loader.loadClass("net.minecraft.util.ResourceLocation");
-        Class<?> controllerStyle = loader.loadClass(
-            "com.fushu.mmceguiext.client.config.MachineGuiStyleManager$ControllerStyle"
-        );
-
-        assertNotNull(api.getMethod("newControllerStyle"));
-        assertNotNull(api.getMethod("resolveMachineControllerStyle", resourceLocation));
-        assertNotNull(api.getMethod("resolveFactoryControllerStyle", resourceLocation));
-        assertNotNull(api.getMethod("registerMachineControllerStyle", resourceLocation, controllerStyle));
-        assertNotNull(api.getMethod("registerFactoryControllerStyle", resourceLocation, controllerStyle));
-        assertNotNull(api.getMethod("clearExternalStyles"));
-    }
-
-    @Test
-    public void keepsApiContractStableAcrossExampleUpdates() throws Exception {
-        Class<?> provider = Thread.currentThread()
-            .getContextClassLoader()
-            .loadClass("com.fushu.mmceguiext.api.machine.IMultiMachineComponentProvider");
-
-        assertNotNull(provider.getMethod("provideComponents"));
-    }
-
-    @Test
-    public void exposesControllerGuiStyleProviderApi() throws Exception {
-        Class<?> provider = Thread.currentThread()
-            .getContextClassLoader()
-            .loadClass("com.fushu.mmceguiext.api.gui.IMachineGuiStyleProvider");
-
-        assertNotNull(provider.getMethod("getMachineControllerGuiStyle"));
-    }
-
-    @Test
-    public void exposesResizableControllerGuiConstructorForSingleBlockBridge() throws Exception {
-        ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        Class<?> gui = loader.loadClass("com.fushu.mmceguiext.client.gui.GuiMachineControllerResizable");
+        Class<?> bridge = loader.loadClass("com.fushu.mmceguiext.api.gui.MachineGuiBridge");
         Class<?> guiScreen = loader.loadClass("net.minecraft.client.gui.GuiScreen");
-        Class<?> container = loader.loadClass("hellfirepvp.modularmachinery.common.container.ContainerController");
+        Class<?> controller =
+            loader.loadClass("hellfirepvp.modularmachinery.common.container.ContainerController");
+        Class<?> factory =
+            loader.loadClass("hellfirepvp.modularmachinery.common.container.ContainerFactoryController");
 
-        assertTrue(guiScreen.isAssignableFrom(gui));
-        assertNotNull(gui.getConstructor(container));
+        assertEquals(
+            guiScreen,
+            bridge.getMethod("createMachineControllerScreen", controller).getReturnType()
+        );
+        assertEquals(
+            guiScreen,
+            bridge.getMethod("createFactoryControllerScreen", factory).getReturnType()
+        );
+    }
+
+    @Test
+    public void exposesControllerStyleKeyProviderWithoutInternalStyleApi() throws Exception {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        Class<?> provider = loader.loadClass("com.fushu.mmceguiext.api.gui.IMachineGuiStyleProvider");
+        assertNotNull(provider.getMethod("getMachineControllerGuiStyle"));
+        try {
+            loader.loadClass("com.fushu.mmceguiext.api.gui.MachineGuiStyleApi");
+            fail("MachineGuiStyleApi must not expose internal ControllerStyle");
+        } catch (ClassNotFoundException expected) {
+            // JSON plus style-key providers are the stable downstream contract.
+        }
+    }
+
+    @Test
+    public void exposesImmutableSlotLayoutContracts() throws Exception {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        Class<?> provider = loader.loadClass("com.fushu.mmceguiext.api.gui.SlotLayoutProvider");
+        assertNotNull(provider.getMethod("getSlotGroups"));
+        assertNotNull(provider.getMethod("getPlayerInventory"));
+
+        Class<?> slotGroup = loader.loadClass("com.fushu.mmceguiext.api.gui.SlotGroupDescriptor");
+        assertNotNull(slotGroup.getConstructor(
+            String.class,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            String.class,
+            Boolean.TYPE
+        ));
+        assertNotNull(slotGroup.getMethod("getSlotIndices"));
+        assertFinalFields(slotGroup);
+
+        Class<?> playerInv = loader.loadClass("com.fushu.mmceguiext.api.gui.PlayerInventoryDescriptor");
+        assertNotNull(playerInv.getConstructor(
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Integer.TYPE,
+            Boolean.TYPE
+        ));
+        assertFinalFields(playerInv);
+    }
+
+    private static void assertFinalFields(Class<?> type) {
+        for (Field field : type.getFields()) {
+            assertTrue(
+                type.getName() + "." + field.getName() + " should be final",
+                java.lang.reflect.Modifier.isFinal(field.getModifiers())
+            );
+        }
     }
 }

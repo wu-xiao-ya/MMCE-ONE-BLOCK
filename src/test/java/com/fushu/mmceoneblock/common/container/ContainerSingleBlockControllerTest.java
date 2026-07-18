@@ -1,15 +1,10 @@
 package com.fushu.mmceoneblock.common.container;
 
-import com.fushu.mmceoneblock.common.network.GuiHandler;
-import hellfirepvp.modularmachinery.common.item.ItemBlueprint;
-import hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController;
-import net.minecraft.item.Item;
+import com.fushu.mmceguiext.api.gui.PlayerInventoryDescriptor;
+import com.fushu.mmceguiext.api.gui.SlotGroupDescriptor;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -17,128 +12,91 @@ import static org.junit.Assert.assertTrue;
 
 public final class ContainerSingleBlockControllerTest {
     @Test
-    public void slotBoundariesMatchMmceControllerLayout() {
-        assertEquals(36, ContainerSingleBlockController.playerSlotCount());
-        assertEquals(
-            36 + TileMultiblockMachineController.BLUEPRINT_SLOT,
-            ContainerSingleBlockController.controllerSlotStart()
+    public void controllerLayoutMatchesPublishedSlotDescriptors() {
+        List<SlotGroupDescriptor> groups =
+            OneBlockContainerSupport.Layout.CONTROLLER.slotGroups(9, 19);
+
+        assertEquals(3, groups.size());
+        assertSlotGroup(groups.get(0), "input", 37, 9, 8, 17, 2, 5);
+        assertSlotGroup(groups.get(1), "output", 46, 9, 8, 66, 2, 5);
+        assertSlotGroup(groups.get(2), "blueprint", 36, 1, 151, 8, 1, 1);
+
+        PlayerInventoryDescriptor playerInventory =
+            OneBlockContainerSupport.Layout.CONTROLLER.playerInventory();
+        assertEquals(8, playerInventory.x);
+        assertEquals(131, playerInventory.y);
+        assertEquals(8, playerInventory.hotbarX);
+        assertEquals(189, playerInventory.hotbarY);
+        assertEquals(0, playerInventory.mainStart);
+        assertEquals(27, playerInventory.hotbarStart);
+        assertTrue(playerInventory.enabled);
+
+        assertEquals(8, OneBlockContainerSupport.internalSlotX(
+            OneBlockContainerSupport.Layout.CONTROLLER, 0, 9));
+        assertEquals(80, OneBlockContainerSupport.internalSlotX(
+            OneBlockContainerSupport.Layout.CONTROLLER, 4, 9));
+        assertEquals(8, OneBlockContainerSupport.internalSlotX(
+            OneBlockContainerSupport.Layout.CONTROLLER, 9, 9));
+        assertEquals(17, OneBlockContainerSupport.internalSlotY(
+            OneBlockContainerSupport.Layout.CONTROLLER, 0, 9));
+        assertEquals(66, OneBlockContainerSupport.internalSlotY(
+            OneBlockContainerSupport.Layout.CONTROLLER, 9, 9));
+    }
+
+    @Test
+    public void controllerShiftClickRoutesBlueprintInputAndMachineSlots() {
+        assertRange(
+            OneBlockContainerSupport.transferTarget(0, true, 55, 9),
+            36, 37
         );
-        assertEquals(37, ContainerSingleBlockController.firstInternalSlotIndex());
-    }
-
-    @Test
-    public void blueprintSlotIsPinnedBeforeInternalSlots() {
-        int slotCount = ContainerSingleBlockController.firstInternalSlotIndex() + 3;
-
-        assertEquals(36, ContainerSingleBlockController.blueprintSlotIndex());
-        assertEquals(ContainerSingleBlockController.blueprintSlotIndex(), ContainerSingleBlockController.controllerSlotStart());
-        assertTrue(ContainerSingleBlockController.isBlueprintSlotIndex(ContainerSingleBlockController.blueprintSlotIndex()));
-        assertFalse(ContainerSingleBlockController.isBlueprintSlotIndex(ContainerSingleBlockController.blueprintSlotIndex() - 1));
-        assertFalse(ContainerSingleBlockController.isBlueprintSlotIndex(ContainerSingleBlockController.firstInternalSlotIndex()));
-        assertFalse(ContainerSingleBlockController.isInternalSlotIndex(ContainerSingleBlockController.blueprintSlotIndex(), slotCount));
-        assertTrue(ContainerSingleBlockController.isInternalSlotIndex(ContainerSingleBlockController.firstInternalSlotIndex(), slotCount));
-        assertTrue(ContainerSingleBlockController.isInternalSlotIndex(slotCount - 1, slotCount));
-        assertFalse(ContainerSingleBlockController.isInternalSlotIndex(slotCount, slotCount));
-    }
-
-    @Test
-    public void internalSlotsRejectBlueprintStacks() {
-        assertFalse(ContainerSingleBlockController.isInternalItemValid(new ItemBlueprint()));
-        assertTrue(ContainerSingleBlockController.isInternalItemValid(new Item()));
-    }
-
-    @Test
-    public void internalSlotsUseStableEightColumnGrid() {
-        assertEquals(8, ContainerSingleBlockController.internalSlotX(0));
-        assertEquals(17, ContainerSingleBlockController.internalSlotY(0));
-        assertEquals(134, ContainerSingleBlockController.internalSlotX(7));
-        assertEquals(17, ContainerSingleBlockController.internalSlotY(7));
-        assertEquals(8, ContainerSingleBlockController.internalSlotX(8));
-        assertEquals(35, ContainerSingleBlockController.internalSlotY(8));
-    }
-
-    @Test
-    public void guiIdIsStableAndBlockUsesConstant() throws IOException {
-        assertEquals(1, GuiHandler.GUI_SINGLE_BLOCK_CONTROLLER);
-
-        String blockSource = new String(
-            Files.readAllBytes(Paths.get(
-                "src",
-                "main",
-                "java",
-                "com",
-                "fushu",
-                "mmceoneblock",
-                "common",
-                "block",
-                "BlockSingleBlockMachineController.java"
-            )),
-            StandardCharsets.UTF_8
+        assertRange(
+            OneBlockContainerSupport.transferTarget(1, false, 55, 9),
+            37, 46
         );
-        assertTrue(blockSource.contains("GuiHandler.GUI_SINGLE_BLOCK_CONTROLLER"));
-        assertFalse(blockSource.contains("ordinal()"));
+        assertRange(
+            OneBlockContainerSupport.transferTarget(37, false, 55, 9),
+            0, 36
+        );
+        assertRange(
+            OneBlockContainerSupport.transferTarget(46, false, 55, 9),
+            0, 36
+        );
     }
 
     @Test
-    public void shiftClickRoutesPlayerItemsToInternalSlots() {
-        ContainerSingleBlockController.MergeRange range = ContainerSingleBlockController.transferTarget(
-            0,
-            false,
-            ContainerSingleBlockController.firstInternalSlotIndex() + 3
-        );
+    public void illegalIndexOrMissingInputProducesEmptyTransferTarget() {
+        assertFalse(OneBlockContainerSupport.transferTarget(-1, false, 55, 9).isValid());
+        assertFalse(OneBlockContainerSupport.transferTarget(55, false, 55, 9).isValid());
+        assertFalse(OneBlockContainerSupport.transferTarget(0, false, 37, 0).isValid());
+    }
 
-        assertEquals(ContainerSingleBlockController.firstInternalSlotIndex(), range.getStart());
-        assertEquals(ContainerSingleBlockController.firstInternalSlotIndex() + 3, range.getEnd());
+    private static void assertRange(OneBlockContainerSupport.MergeRange range,
+                                    int start,
+                                    int end) {
+        assertTrue(range.isValid());
+        assertEquals(start, range.getStart());
+        assertEquals(end, range.getEnd());
         assertFalse(range.isReverse());
     }
 
-    @Test
-    public void shiftClickRoutesPlayerBlueprintsToBlueprintSlotOnly() {
-        ContainerSingleBlockController.MergeRange range = ContainerSingleBlockController.transferTarget(
-            35,
-            true,
-            ContainerSingleBlockController.firstInternalSlotIndex() + 3
-        );
-
-        assertEquals(ContainerSingleBlockController.controllerSlotStart(), range.getStart());
-        assertEquals(ContainerSingleBlockController.controllerSlotStart() + 1, range.getEnd());
-        assertFalse(range.isReverse());
-    }
-
-    @Test
-    public void shiftClickRoutesControllerSlotsBackToPlayerInventory() {
-        ContainerSingleBlockController.MergeRange range = ContainerSingleBlockController.transferTarget(
-            ContainerSingleBlockController.firstInternalSlotIndex(),
-            false,
-            ContainerSingleBlockController.firstInternalSlotIndex() + 3
-        );
-
-        assertEquals(0, range.getStart());
-        assertEquals(ContainerSingleBlockController.playerSlotCount(), range.getEnd());
-        assertFalse(range.isReverse());
-    }
-
-    @Test
-    public void shiftClickRejectsPlayerItemsWhenNoInternalSlotsExist() {
-        ContainerSingleBlockController.MergeRange range = ContainerSingleBlockController.transferTarget(
-            0,
-            false,
-            ContainerSingleBlockController.firstInternalSlotIndex()
-        );
-
-        assertEquals(-1, range.getStart());
-        assertEquals(-1, range.getEnd());
-    }
-
-    @Test
-    public void shiftClickRejectsOutOfRangeSlotIndex() {
-        ContainerSingleBlockController.MergeRange range = ContainerSingleBlockController.transferTarget(
-            ContainerSingleBlockController.firstInternalSlotIndex() + 3,
-            false,
-            ContainerSingleBlockController.firstInternalSlotIndex() + 3
-        );
-
-        assertEquals(-1, range.getStart());
-        assertEquals(-1, range.getEnd());
+    private static void assertSlotGroup(SlotGroupDescriptor group,
+                                        String id,
+                                        int firstSlot,
+                                        int slotCount,
+                                        int x,
+                                        int y,
+                                        int rows,
+                                        int columns) {
+        assertEquals(id, group.id);
+        assertEquals(firstSlot, group.firstSlot);
+        assertEquals(slotCount, group.slotCount);
+        assertEquals(x, group.x);
+        assertEquals(y, group.y);
+        assertEquals(rows, group.rows);
+        assertEquals(columns, group.columns);
+        assertEquals(18, group.spacingX);
+        assertEquals(18, group.spacingY);
+        assertEquals("playerInventory", group.shiftTarget);
+        assertTrue(group.enabled);
     }
 }

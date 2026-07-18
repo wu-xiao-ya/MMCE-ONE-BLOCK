@@ -15,9 +15,10 @@ if (-not (Test-Path -LiteralPath $LogPath)) {
 }
 
 $log = Get-Content -LiteralPath $LogPath -Raw
+$machineCount = [int](& (Join-Path $scriptDir 'Get-SmokeMachineCount.ps1'))
 $required = @(
-    'Loaded 1 one-block machine definition(s)',
-    'Validated 1 one-block machine definition(s) against loaded MMCE machines (0 skipped)',
+    "Loaded $machineCount one-block machine definition(s)",
+    "Validated $machineCount one-block machine definition(s) against loaded MMCE machines (0 missing, 0 mismatched)",
     'Machines: [1 loaded, 0 failed]',
     'modularmachinery:starter_machine (Recipes): [1 loaded, 0 failed]',
     'Forge Mod Loader has successfully loaded',
