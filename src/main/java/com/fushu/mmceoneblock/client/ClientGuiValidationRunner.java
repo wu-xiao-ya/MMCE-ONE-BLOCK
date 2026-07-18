@@ -16,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.init.Blocks;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
 import net.minecraft.network.play.server.SPacketBlockChange;
@@ -193,6 +194,7 @@ public final class ClientGuiValidationRunner {
             }
 
             world.setBlockToAir(this.pos);
+            world.setBlockState(this.pos.down(), Blocks.STONE.getDefaultState(), 3);
             net.minecraft.block.state.IBlockState oldState = world.getBlockState(this.pos);
             net.minecraft.block.state.IBlockState state = block.getDefaultState()
                 .withProperty(BlockController.FACING, EnumFacing.NORTH);
