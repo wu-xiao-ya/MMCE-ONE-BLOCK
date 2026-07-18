@@ -761,12 +761,6 @@ public final class MachineConfigLoader {
     }
 
     private static ResourceLocation parseStrictResourceLocation(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
-        ResourceLocation location = new ResourceLocation(normalized);
-        if (!location.getNamespace().matches(RESOURCE_NAMESPACE_PATTERN)
-            || !location.getPath().matches(RESOURCE_PATH_PATTERN)) {
-            throw new IllegalArgumentException("Invalid resource location: " + raw);
-        }
-        return location;
+        return StrictResourceLocation.parse(raw);
     }
 }

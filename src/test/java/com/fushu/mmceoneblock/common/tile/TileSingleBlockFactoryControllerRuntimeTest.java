@@ -3,6 +3,7 @@ package com.fushu.mmceoneblock.common.tile;
 import com.fushu.mmceoneblock.common.config.MachineBlockDefinition;
 import com.fushu.mmceoneblock.common.config.MachineComponentDefinition;
 import com.fushu.mmceoneblock.common.config.MachineDefinition;
+import com.fushu.mmceoneblock.common.config.ControllerType;
 import com.google.gson.JsonObject;
 import hellfirepvp.modularmachinery.common.machine.MachineComponent;
 import hellfirepvp.modularmachinery.common.util.IEnergyHandlerAsync;
@@ -21,9 +22,39 @@ import static org.junit.Assert.assertTrue;
 
 public final class TileSingleBlockFactoryControllerRuntimeTest {
     @Test
-    public void factorySharesRuntimeComponentsAndPayloadContract() {
-        TestFactoryTile tile = new TestFactoryTile(factoryDefinition());
+    public void factoryPrefersFactoryGuiStyleAndKeepsRuntimeContract() {
+        TestFactoryTile tile = new TestFactoryTile(factoryDefinition(
+            "mmceoneblock:factory_runtime_test",
+            "mmceoneblock:factory_runtime_theme"
+        ));
 
+        assertEquals(new ResourceLocation("mmceoneblock", "factory_runtime_theme"),
+            tile.getMachineControllerGuiStyle());
+
+        assertFactoryRuntimeContract(tile);
+    }
+
+    @Test
+    public void factoryFallsBackToGuiStyleWhenFactoryGuiStyleIsMissing() {
+        TestFactoryTile tile = new TestFactoryTile(factoryDefinition(null));
+
+        assertEquals(new ResourceLocation("mmceoneblock", "factory_runtime_test"),
+            tile.getMachineControllerGuiStyle());
+
+        assertFactoryRuntimeContract(tile);
+    }
+
+    @Test
+    public void factoryFallsBackToGuiStyleWhenFactoryGuiStyleIsIllegal() {
+        TestFactoryTile tile = new TestFactoryTile(factoryDefinition("not a valid resource location"));
+
+        assertEquals(new ResourceLocation("mmceoneblock", "factory_runtime_test"),
+            tile.getMachineControllerGuiStyle());
+
+        assertFactoryRuntimeContract(tile);
+    }
+
+    private static void assertFactoryRuntimeContract(TestFactoryTile tile) {
         Collection<MachineComponent<?>> first = tile.provideMachineComponents();
         assertEquals(4, first.size());
         assertSame(first, tile.provideMachineComponents());
@@ -48,7 +79,11 @@ public final class TileSingleBlockFactoryControllerRuntimeTest {
         assertEquals(600L, output.getLong("oneBlockEnergy"));
     }
 
-    private static MachineDefinition factoryDefinition() {
+    private static MachineDefinition factoryDefinition(String factoryGuiStyle) {
+        return factoryDefinition("mmceoneblock:factory_runtime_test", factoryGuiStyle);
+    }
+
+    private static MachineDefinition factoryDefinition(String guiStyle, String factoryGuiStyle) {
         return new MachineDefinition(
             "factory_runtime_test",
             new ResourceLocation("modularmachinery", "factory_runtime_test"),
@@ -64,8 +99,10 @@ public final class TileSingleBlockFactoryControllerRuntimeTest {
                 component("fluid_output", "fluid_out", "capacity", 1000),
                 component("energy_input", "energy_in", "capacity", 1000)
             ),
-            "mmceoneblock:factory_runtime_test",
-            Paths.get("factory_runtime_test.json")
+            guiStyle,
+            Paths.get("factory_runtime_test.json"),
+            ControllerType.AUTO,
+            factoryGuiStyle
         );
     }
 

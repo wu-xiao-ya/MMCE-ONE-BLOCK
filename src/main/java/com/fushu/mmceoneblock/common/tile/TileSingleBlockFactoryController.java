@@ -2,8 +2,6 @@ package com.fushu.mmceoneblock.common.tile;
 
 import com.fushu.mmceguiext.api.gui.IMachineGuiStyleProvider;
 import com.fushu.mmceguiext.api.machine.IMultiMachineComponentProvider;
-import com.fushu.mmceoneblock.MMCEOneBlock;
-import com.fushu.mmceoneblock.common.block.BlockSingleBlockMachineController;
 import com.fushu.mmceoneblock.common.config.MachineDefinition;
 import com.fushu.mmceoneblock.common.registry.MachineRegistry;
 import hellfirepvp.modularmachinery.common.block.BlockController;
@@ -12,10 +10,7 @@ import hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext
 import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
 import hellfirepvp.modularmachinery.common.machine.MachineComponent;
 import hellfirepvp.modularmachinery.common.machine.RecipeThread;
-import hellfirepvp.modularmachinery.common.machine.TaggedPositionBlockArray;
 import hellfirepvp.modularmachinery.common.tiles.TileFactoryController;
-import hellfirepvp.modularmachinery.common.util.BlockArray;
-import hellfirepvp.modularmachinery.common.util.IBlockStateDescriptor;
 import hellfirepvp.modularmachinery.common.util.IOInventory;
 import mekanism.api.gas.IGasHandler;
 import mekanism.api.gas.ITubeConnection;
@@ -23,15 +18,12 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.fml.common.Optional;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Locale;
 
 @Optional.InterfaceList({
     @Optional.Interface(modid = "mekanism", iface = "mekanism.api.gas.IGasHandler"),
@@ -42,7 +34,6 @@ public class TileSingleBlockFactoryController extends TileFactoryController
     IMachineGuiStyleProvider, IGasHandler, ITubeConnection {
 
     private final OneBlockControllerRuntime runtime;
-    private ResourceLocation lastMissingMachine;
 
     public TileSingleBlockFactoryController() {
         super();
@@ -64,25 +55,7 @@ public class TileSingleBlockFactoryController extends TileFactoryController
 
     @Override
     public String getDefinitionId() {
-        String fromRuntime = runtime.getDefinitionId();
-        return fromRuntime.isEmpty() ? resolveDefinitionFromBlock() : fromRuntime;
-    }
-
-    private String resolveDefinitionFromBlock() {
-        if (world == null || pos == null || !world.isBlockLoaded(pos)) {
-            return "";
-        }
-        if (!(world.getBlockState(pos).getBlock() instanceof BlockSingleBlockMachineController)) {
-            return "";
-        }
-        BlockSingleBlockMachineController block =
-            (BlockSingleBlockMachineController) world.getBlockState(pos).getBlock();
-        MachineDefinition definition = block.getDefinition();
-        if (definition != null && !definition.getId().equals(runtime.getDefinitionId())) {
-            setDefinitionId(definition.getId());
-            return definition.getId();
-        }
-        return definition == null ? "" : definition.getId();
+        return runtime.getDefinitionId(world, pos);
     }
 
     @Nullable
@@ -111,18 +84,11 @@ public class TileSingleBlockFactoryController extends TileFactoryController
             return true;
         }
 
-        DynamicMachine machine = hellfirepvp.modularmachinery.common.machine.MachineRegistry
-            .getRegistry().getMachine(definition.getMachine());
+        DynamicMachine machine = runtime.resolveBackingMachine(definition, "factory");
         if (machine == null) {
-            if (!definition.getMachine().equals(lastMissingMachine)) {
-                MMCEOneBlock.log.warn("One-block factory '{}' points to unknown MMCE machine '{}'.",
-                    definition.getId(), definition.getMachine());
-                lastMissingMachine = definition.getMachine();
-            }
             resetMachine(true);
             return true;
         }
-        lastMissingMachine = null;
 
         if (machine.isRequiresBlueprint() && !machine.equals(getBlueprintMachine())) {
             resetMachine(true);
@@ -141,22 +107,12 @@ public class TileSingleBlockFactoryController extends TileFactoryController
         prevMachine = foundMachine;
         foundMachine = machine;
         parentMachine = machine;
-        foundPattern = createSyntheticPattern();
+        foundPattern = runtime.createSyntheticPattern(world, pos);
         foundReplacements = new DynamicMachine.ModifierReplacementMap();
         foundDynamicPatterns.clear();
         runtime.syncDefinition(definition);
         onStructureFormed();
         return true;
-    }
-
-    private TaggedPositionBlockArray createSyntheticPattern() {
-        TaggedPositionBlockArray pattern = new TaggedPositionBlockArray();
-        IBlockState state = world.getBlockState(pos);
-        BlockArray.BlockInformation info = new BlockArray.BlockInformation(
-            Collections.singletonList(IBlockStateDescriptor.of(state.getBlock())));
-        pattern.addBlock(BlockPos.ORIGIN, info);
-        pattern.flushTileBlocksCache();
-        return pattern;
     }
 
     @Override
@@ -291,26 +247,7 @@ public class TileSingleBlockFactoryController extends TileFactoryController
     @Nullable
     @Override
     public ResourceLocation getMachineControllerGuiStyle() {
-        MachineDefinition definition = getDefinition();
-        if (definition == null) {
-            return null;
-        }
-        String factoryGuiStyle = definition.getFactoryGuiStyle();
-        if (factoryGuiStyle != null && !factoryGuiStyle.trim().isEmpty()) {
-            try {
-                return new ResourceLocation(factoryGuiStyle.trim().toLowerCase(Locale.ROOT));
-            } catch (Exception ex) {
-                // fall through to the regular style
-            }
-        }
-        if (definition.getGuiStyle() == null || definition.getGuiStyle().trim().isEmpty()) {
-            return null;
-        }
-        try {
-            return new ResourceLocation(definition.getGuiStyle().trim().toLowerCase(Locale.ROOT));
-        } catch (Exception ex) {
-            return null;
-        }
+        return runtime.resolveFactoryGuiStyle(getDefinition());
     }
 
     @Override

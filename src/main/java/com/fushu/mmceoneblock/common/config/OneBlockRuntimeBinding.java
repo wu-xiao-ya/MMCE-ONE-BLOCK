@@ -202,7 +202,7 @@ public final class OneBlockRuntimeBinding {
             throw new IllegalArgumentException("Machine definition " + sourceFile + " is missing " + key);
         }
         try {
-            return new ResourceLocation(value.toLowerCase(Locale.ROOT));
+            return StrictResourceLocation.parse(value);
         } catch (Exception ex) {
             throw new IllegalArgumentException("Machine definition " + sourceFile + " has an illegal " + key + " '" + raw + "'", ex);
         }
@@ -215,7 +215,7 @@ public final class OneBlockRuntimeBinding {
             return null;
         }
         try {
-            return new ResourceLocation(value.toLowerCase(Locale.ROOT));
+            return StrictResourceLocation.parse(value);
         } catch (Exception ex) {
             throw new IllegalArgumentException("Machine definition " + sourceFile + " has an illegal " + key + " '" + raw + "'", ex);
         }

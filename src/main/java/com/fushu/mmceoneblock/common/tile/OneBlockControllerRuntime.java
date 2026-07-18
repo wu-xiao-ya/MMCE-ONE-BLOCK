@@ -1,6 +1,11 @@
 package com.fushu.mmceoneblock.common.tile;
 
+import com.fushu.mmceoneblock.common.config.MachineDefinition;
 import hellfirepvp.modularmachinery.common.machine.MachineComponent;
+import hellfirepvp.modularmachinery.common.machine.DynamicMachine;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import mekanism.api.gas.Gas;
 import mekanism.api.gas.GasStack;
 import mekanism.api.gas.GasTankInfo;
@@ -20,6 +25,8 @@ public final class OneBlockControllerRuntime {
     private final MachineComponentStorage components;
     private final OneBlockStateSynchronizer stateSync;
     private final OneBlockCapabilityRouter capabilityRouter;
+    @Nullable
+    private ResourceLocation lastMissingMachine;
 
     public OneBlockControllerRuntime(MachineComponentStorage.Host host) {
         this.host = host;
@@ -38,6 +45,15 @@ public final class OneBlockControllerRuntime {
         return components.getDefinitionId();
     }
 
+    public String getDefinitionId(@Nullable World world, @Nullable BlockPos pos) {
+        String definitionId = getDefinitionId();
+        if (!definitionId.isEmpty()) {
+            return definitionId;
+        }
+        MachineDefinition definition = resolveDefinitionFromBlock(world, pos);
+        return definition == null ? "" : definition.getId();
+    }
+
     public long getGroupId() {
         return components.getGroupId();
     }
@@ -49,6 +65,51 @@ public final class OneBlockControllerRuntime {
         } finally {
             stateSync.endRestore();
         }
+    }
+
+    @Nullable
+    public MachineDefinition resolveDefinitionFromBlock(@Nullable World world, @Nullable BlockPos pos) {
+        MachineDefinition definition = OneBlockControllerRuntimeSupport.restoreDefinitionFromBlock(world, pos);
+        if (definition != null && !definition.getId().equals(components.getDefinitionId())) {
+            setDefinitionId(definition.getId());
+        }
+        return definition;
+    }
+
+    @Nullable
+    public DynamicMachine resolveBackingMachine(MachineDefinition definition, String controllerLabel) {
+        DynamicMachine machine = OneBlockControllerRuntimeSupport.resolveBackingMachine(definition);
+        if (machine == null) {
+            ResourceLocation missingMachine = definition.getMachine();
+            if (!missingMachine.equals(lastMissingMachine)) {
+                com.fushu.mmceoneblock.MMCEOneBlock.log.warn(
+                    "One-block {} '{}' points to unknown MMCE machine '{}'.",
+                    controllerLabel,
+                    definition.getId(),
+                    missingMachine
+                );
+                lastMissingMachine = missingMachine;
+            }
+            return null;
+        }
+        lastMissingMachine = null;
+        return machine;
+    }
+
+    @Nonnull
+    public hellfirepvp.modularmachinery.common.machine.TaggedPositionBlockArray createSyntheticPattern(@Nullable World world,
+                                                                                                       @Nullable BlockPos pos) {
+        return OneBlockControllerRuntimeSupport.createSyntheticPattern(world, pos);
+    }
+
+    @Nullable
+    public ResourceLocation resolveGuiStyle(MachineDefinition definition) {
+        return OneBlockControllerRuntimeSupport.resolveGuiStyle(definition);
+    }
+
+    @Nullable
+    public ResourceLocation resolveFactoryGuiStyle(MachineDefinition definition) {
+        return OneBlockControllerRuntimeSupport.resolveFactoryGuiStyle(definition);
     }
 
     @Nonnull

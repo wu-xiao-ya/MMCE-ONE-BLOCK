@@ -1,5 +1,6 @@
 package com.fushu.mmceoneblock.tile;
 
+import com.fushu.mmceoneblock.common.config.ControllerType;
 import com.fushu.mmceoneblock.common.config.MachineBlockDefinition;
 import com.fushu.mmceoneblock.common.config.MachineComponentDefinition;
 import com.fushu.mmceoneblock.common.config.MachineDefinition;
@@ -192,7 +193,9 @@ public final class TileSingleBlockMachineControllerTest {
             new MachineBlockDefinition("mmceoneblock:single_block_machine_controller", "mmceoneblock:blocks/runtime_test"),
             components,
             "mmceoneblock:runtime_test",
-            Paths.get("runtime-test.json")
+            Paths.get("runtime-test.json"),
+            ControllerType.AUTO,
+            "mmceoneblock:factory_runtime_test"
         );
     }
 

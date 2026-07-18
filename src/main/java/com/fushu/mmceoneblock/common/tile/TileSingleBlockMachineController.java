@@ -2,8 +2,6 @@ package com.fushu.mmceoneblock.common.tile;
 
 import com.fushu.mmceguiext.api.gui.IMachineGuiStyleProvider;
 import com.fushu.mmceguiext.api.machine.IMultiMachineComponentProvider;
-import com.fushu.mmceoneblock.MMCEOneBlock;
-import com.fushu.mmceoneblock.common.block.BlockSingleBlockMachineController;
 import com.fushu.mmceoneblock.common.config.MachineDefinition;
 import com.fushu.mmceoneblock.common.registry.MachineRegistry;
 import hellfirepvp.modularmachinery.common.block.BlockController;
@@ -14,8 +12,6 @@ import hellfirepvp.modularmachinery.common.machine.MachineComponent;
 import hellfirepvp.modularmachinery.common.machine.RecipeThread;
 import hellfirepvp.modularmachinery.common.machine.TaggedPositionBlockArray;
 import hellfirepvp.modularmachinery.common.tiles.TileMachineController;
-import hellfirepvp.modularmachinery.common.util.BlockArray;
-import hellfirepvp.modularmachinery.common.util.IBlockStateDescriptor;
 import hellfirepvp.modularmachinery.common.util.IOInventory;
 import mekanism.api.gas.IGasHandler;
 import mekanism.api.gas.ITubeConnection;
@@ -30,8 +26,6 @@ import net.minecraftforge.fml.common.Optional;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Locale;
 
 @Optional.InterfaceList({
     @Optional.Interface(modid = "mekanism", iface = "mekanism.api.gas.IGasHandler"),
@@ -42,7 +36,6 @@ public class TileSingleBlockMachineController extends TileMachineController
     IMachineGuiStyleProvider, IGasHandler, ITubeConnection {
 
     private final OneBlockControllerRuntime runtime;
-    private ResourceLocation lastMissingMachine;
 
     public TileSingleBlockMachineController() {
         super();
@@ -62,30 +55,18 @@ public class TileSingleBlockMachineController extends TileMachineController
     }
 
     public String getDefinitionId() {
-        return runtime.getDefinitionId();
+        return runtime.getDefinitionId(world, pos);
+    }
+
+    @Nullable
+    public MachineDefinition resolveDefinitionFromBlock() {
+        return runtime.resolveDefinitionFromBlock(world, pos);
     }
 
     @Nullable
     public MachineDefinition getDefinition() {
         String id = getDefinitionId();
         return id.isEmpty() ? null : MachineRegistry.getDefinition(id);
-    }
-
-    @Nullable
-    public MachineDefinition resolveDefinitionFromBlock() {
-        if (world == null || pos == null || !world.isBlockLoaded(pos)) {
-            return null;
-        }
-        if (!(world.getBlockState(pos).getBlock() instanceof BlockSingleBlockMachineController)) {
-            return null;
-        }
-        BlockSingleBlockMachineController block =
-            (BlockSingleBlockMachineController) world.getBlockState(pos).getBlock();
-        MachineDefinition definition = block.getDefinition();
-        if (definition != null && !definition.getId().equals(getDefinitionId())) {
-            setDefinitionId(definition.getId());
-        }
-        return definition;
     }
 
     @Override
@@ -116,18 +97,11 @@ public class TileSingleBlockMachineController extends TileMachineController
             return true;
         }
 
-        DynamicMachine machine = hellfirepvp.modularmachinery.common.machine.MachineRegistry
-            .getRegistry().getMachine(definition.getMachine());
+        DynamicMachine machine = runtime.resolveBackingMachine(definition, "machine");
         if (machine == null) {
-            if (!definition.getMachine().equals(lastMissingMachine)) {
-                MMCEOneBlock.log.warn("One-block machine '{}' points to unknown MMCE machine '{}'.",
-                    definition.getId(), definition.getMachine());
-                lastMissingMachine = definition.getMachine();
-            }
             resetMachine(true);
             return true;
         }
-        lastMissingMachine = null;
 
         if (machine.isRequiresBlueprint() && !machine.equals(getBlueprintMachine())) {
             resetMachine(true);
@@ -155,13 +129,7 @@ public class TileSingleBlockMachineController extends TileMachineController
     }
 
     public TaggedPositionBlockArray createSyntheticPattern() {
-        TaggedPositionBlockArray pattern = new TaggedPositionBlockArray();
-        IBlockState state = world.getBlockState(pos);
-        BlockArray.BlockInformation info = new BlockArray.BlockInformation(
-            Collections.singletonList(IBlockStateDescriptor.of(state.getBlock())));
-        pattern.addBlock(BlockPos.ORIGIN, info);
-        pattern.flushTileBlocksCache();
-        return pattern;
+        return runtime.createSyntheticPattern(world, pos);
     }
 
     @Override
@@ -200,16 +168,7 @@ public class TileSingleBlockMachineController extends TileMachineController
     @Nullable
     @Override
     public ResourceLocation getMachineControllerGuiStyle() {
-        MachineDefinition definition = getDefinition();
-        if (definition == null || definition.getGuiStyle() == null
-            || definition.getGuiStyle().trim().isEmpty()) {
-            return null;
-        }
-        try {
-            return new ResourceLocation(definition.getGuiStyle().trim().toLowerCase(Locale.ROOT));
-        } catch (Exception ex) {
-            return null;
-        }
+        return runtime.resolveGuiStyle(getDefinition());
     }
 
     public int getItemInputSlotCount() {
