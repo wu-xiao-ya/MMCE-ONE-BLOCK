@@ -73,9 +73,16 @@ public class TileSingleBlockMachineController extends TileMachineController
 
     public boolean ensureOneBlockStructureReady() {
         if (world != null && !world.isRemote) {
+            lastStructureCheckTick = -1;
             checkStructure();
         }
         return isStructureFormed() && getFoundMachine() != null;
+    }
+
+    @Override
+    public boolean updateSmartInterfaceValue(String interfaceType, float value) {
+        ensureOneBlockStructureReady();
+        return super.updateSmartInterfaceValue(interfaceType, value);
     }
 
     @Nullable

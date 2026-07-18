@@ -286,10 +286,18 @@ public final class ClientGuiValidationRunner {
                 return;
             }
 
+            TileSingleBlockMachineController controller = (TileSingleBlockMachineController) tile;
             player.openGui(MMCEOneBlock.instance, GuiHandler.GUI_SINGLE_BLOCK_CONTROLLER,
                 world, this.pos.getX(), this.pos.getY(), this.pos.getZ());
-            MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] requested server GUI open id={} pos={}",
-                TARGET_ID, this.pos);
+            DynamicMachine foundMachine = controller.getFoundMachine();
+            MMCEOneBlock.log.info(
+                "[MMCE One Block ClientGuiValidation] requested server GUI open id={} pos={} formed={} foundMachine={} smartType={}",
+                TARGET_ID,
+                this.pos,
+                controller.isStructureFormed(),
+                foundMachine == null ? "null" : foundMachine.getRegistryName(),
+                foundMachine != null && foundMachine.hasSmartInterfaceType(SMART_INTERFACE_KEY)
+            );
         } catch (RuntimeException ex) {
             this.asyncFailureReason = "server_open_exception=" + ex.getClass().getName() + ":" + ex.getMessage();
         }
@@ -477,8 +485,8 @@ public final class ClientGuiValidationRunner {
                     this.asyncFailureReason = "smart_write_server_tile_unexpected:" + className(tile);
                     return;
                 }
-                SmartInterfaceData data = ((TileSingleBlockMachineController) tile)
-                    .getSmartInterfaceData(SMART_INTERFACE_KEY);
+                TileSingleBlockMachineController controller = (TileSingleBlockMachineController) tile;
+                SmartInterfaceData data = controller.getSmartInterfaceData(SMART_INTERFACE_KEY);
                 if (data != null && Math.abs(data.getValue() - SMART_INTERFACE_VALUE) <= 0.0001F) {
                     this.smartWriteVerified = true;
                     MMCEOneBlock.log.info(
@@ -486,6 +494,16 @@ public final class ClientGuiValidationRunner {
                         SMART_INTERFACE_KEY,
                         data.getValue()
                     );
+                } else if (this.ticks - this.smartWriteRequestedAt > 120) {
+                    DynamicMachine foundMachine = controller.getFoundMachine();
+                    this.asyncFailureReason = "smart_write_runtime_missing:formed="
+                        + controller.isStructureFormed()
+                        + ":foundMachine="
+                        + (foundMachine == null ? "null" : foundMachine.getRegistryName())
+                        + ":smartType="
+                        + (foundMachine != null && foundMachine.hasSmartInterfaceType(SMART_INTERFACE_KEY))
+                        + ":customData="
+                        + controller.getCustomDataTag().hasKey(SMART_INTERFACE_KEY);
                 } else {
                     this.smartWriteCheckScheduled = false;
                 }
