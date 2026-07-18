@@ -81,6 +81,8 @@ public final class ClientGuiValidationRunner {
     private boolean smartWriteRequested;
     private volatile boolean smartWriteVerified;
     private volatile boolean smartWriteCheckScheduled;
+    private volatile boolean serverFallbackContainerReady;
+    private volatile boolean serverFallbackContainerScheduled;
     private volatile String asyncFailureReason = null;
     private Boolean previousPauseOnLostFocus;
 
@@ -313,9 +315,49 @@ public final class ClientGuiValidationRunner {
         this.requestedGuiOpen = true;
         this.directFallbackGuiOpen = true;
         this.openedAt = this.ticks;
+        requestServerFallbackContainer();
         mc.displayGuiScreen(screen);
         MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] requested direct fallback GUI open id={} pos={}",
             TARGET_ID, this.pos);
+    }
+
+    private void requestServerFallbackContainer() {
+        if (this.serverFallbackContainerReady || this.serverFallbackContainerScheduled) {
+            return;
+        }
+        MinecraftServer server = FMLCommonHandler.instance().getMinecraftServerInstance();
+        if (server == null || this.pos == null) {
+            return;
+        }
+        this.serverFallbackContainerScheduled = true;
+        server.addScheduledTask(() -> {
+            try {
+                EntityPlayerMP player = serverPlayer(server);
+                if (player == null || this.pos == null) {
+                    this.asyncFailureReason = "server_fallback_container_player_missing";
+                    return;
+                }
+                TileEntity tile = player.getServerWorld().getTileEntity(this.pos);
+                if (!(tile instanceof TileSingleBlockMachineController)) {
+                    this.asyncFailureReason = "server_fallback_container_tile_unexpected:" + className(tile);
+                    return;
+                }
+                player.openContainer =
+                    new ContainerSingleBlockController((TileSingleBlockMachineController) tile, player);
+                this.serverFallbackContainerReady = true;
+                MMCEOneBlock.log.info(
+                    "[MMCE One Block ClientGuiValidation] installed server fallback container id={} pos={} container={}",
+                    TARGET_ID,
+                    this.pos,
+                    player.openContainer.getClass().getName()
+                );
+            } catch (RuntimeException ex) {
+                this.asyncFailureReason = "server_fallback_container_exception="
+                    + ex.getClass().getName() + ":" + ex.getMessage();
+            } finally {
+                this.serverFallbackContainerScheduled = false;
+            }
+        });
     }
 
     private void openSmokeControllerGuiOnServer(MinecraftServer server) {
@@ -523,6 +565,13 @@ public final class ClientGuiValidationRunner {
     }
 
     private boolean verifySmartInterfaceWrite(GuiScreen screen) {
+        if (this.directFallbackGuiOpen && !this.serverFallbackContainerReady) {
+            requestServerFallbackContainer();
+            if (this.ticks - this.openedAt > 160) {
+                fail("server_fallback_container_not_ready");
+            }
+            return false;
+        }
         if (!this.smartWriteRequested) {
             try {
                 Object button = findStyleEntry(screen, "customButtons", "id", "smoke_smart_set");
