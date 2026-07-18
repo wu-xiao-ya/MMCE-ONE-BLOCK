@@ -81,6 +81,7 @@ public final class ClientGuiValidationRunner {
     private volatile boolean smartWriteVerified;
     private volatile boolean smartWriteCheckScheduled;
     private volatile String asyncFailureReason = null;
+    private Boolean previousPauseOnLostFocus;
 
     private ClientGuiValidationRunner() {
     }
@@ -117,6 +118,7 @@ public final class ClientGuiValidationRunner {
             if (this.ticks < 20 || mc.world != null) {
                 return;
             }
+            disablePauseOnLostFocus(mc);
             WorldSettings settings = new WorldSettings(0L, GameType.CREATIVE, false, false, WorldType.FLAT)
                 .enableCommands();
             mc.launchIntegratedServer(
@@ -695,6 +697,7 @@ public final class ClientGuiValidationRunner {
 
         captureValidationScreenshot(FACTORY_TARGET_ID);
         this.done = true;
+        restorePauseOnLostFocus(mc);
         MMCEOneBlock.log.info(
             "[MMCE One Block ClientGuiValidation] PASS id={} screen={} container={} slotCount={} blueprintSlot={} firstInternalSlot={} guiStyle={} openMode=directFallback styleRuntime=true styleEvidence=factory_style displayed=true",
             FACTORY_TARGET_ID,
@@ -889,6 +892,25 @@ public final class ClientGuiValidationRunner {
 
     private void fail(String reason) {
         this.done = true;
+        restorePauseOnLostFocus(Minecraft.getMinecraft());
         MMCEOneBlock.log.error("[MMCE One Block ClientGuiValidation] FAIL reason={}", reason);
+    }
+
+    private void disablePauseOnLostFocus(Minecraft mc) {
+        if (this.previousPauseOnLostFocus == null) {
+            this.previousPauseOnLostFocus = mc.gameSettings.pauseOnLostFocus;
+        }
+        mc.gameSettings.pauseOnLostFocus = false;
+        MMCEOneBlock.log.info(
+            "[MMCE One Block ClientGuiValidation] disabled pauseOnLostFocus for integrated smoke world"
+        );
+    }
+
+    private void restorePauseOnLostFocus(Minecraft mc) {
+        if (this.previousPauseOnLostFocus == null) {
+            return;
+        }
+        mc.gameSettings.pauseOnLostFocus = this.previousPauseOnLostFocus;
+        this.previousPauseOnLostFocus = null;
     }
 }
