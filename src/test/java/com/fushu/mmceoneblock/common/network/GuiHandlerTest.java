@@ -90,22 +90,6 @@ public final class GuiHandlerTest {
     }
 
     @Test
-    public void oneBlockControllersGuardSmartInterfaceUpdatesLocally() throws Exception {
-        assertSame(
-            TileSingleBlockMachineController.class,
-            TileSingleBlockMachineController.class
-                .getMethod("updateSmartInterfaceValue", String.class, float.class)
-                .getDeclaringClass()
-        );
-        assertSame(
-            TileSingleBlockFactoryController.class,
-            TileSingleBlockFactoryController.class
-                .getMethod("updateSmartInterfaceValue", String.class, float.class)
-                .getDeclaringClass()
-        );
-    }
-
-    @Test
     public void bridgeLookupCachesResolvedClassAndMethods() {
         GuiHandler.ClientGuiBridgeLookup lookup = GuiHandler.getClientGuiBridgeLookup();
 

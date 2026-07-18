@@ -101,12 +101,6 @@ public class TileSingleBlockFactoryController extends TileFactoryController
     }
 
     @Override
-    public boolean updateSmartInterfaceValue(String interfaceType, float value) {
-        ensureOneBlockStructureReady();
-        return super.updateSmartInterfaceValue(interfaceType, value);
-    }
-
-    @Override
     protected boolean canCheckStructure() {
         return getDefinition() != null;
     }

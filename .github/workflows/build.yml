@@ -12,7 +12,7 @@ on:
       mmcege_ref:
         description: Exact MMCEGE commit SHA
         required: false
-        default: 3d12b09b91914bd0c72facc17aef8ac4e0a8e846
+        default: a3629b6e407306b5ab05e1bb1c96fba20480c272
       mmce_repo:
         description: Modular Machinery CE repository slug used only for the Gradle wrapper/reference checkout
         required: false
@@ -45,10 +45,10 @@ jobs:
         id: mmcege_ref
         shell: bash
         env:
-          EXPECTED_MMCEGE_SHA: 3d12b09b91914bd0c72facc17aef8ac4e0a8e846
+          EXPECTED_MMCEGE_SHA: a3629b6e407306b5ab05e1bb1c96fba20480c272
         run: |
           repo="${{ github.event.inputs.mmcege_repo || 'wu-xiao-ya/Modular-Machinery-Community-Edition-Gui-Edit' }}"
-          requested="${{ github.event.inputs.mmcege_ref || '3d12b09b91914bd0c72facc17aef8ac4e0a8e846' }}"
+          requested="${{ github.event.inputs.mmcege_ref || 'a3629b6e407306b5ab05e1bb1c96fba20480c272' }}"
           if [ "$requested" != "$EXPECTED_MMCEGE_SHA" ]; then
             echo "MMCEGE must stay pinned to $EXPECTED_MMCEGE_SHA; got '$requested'." >&2
             exit 1

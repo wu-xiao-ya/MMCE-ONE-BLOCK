@@ -79,12 +79,6 @@ public class TileSingleBlockMachineController extends TileMachineController
         return isStructureFormed() && getFoundMachine() != null;
     }
 
-    @Override
-    public boolean updateSmartInterfaceValue(String interfaceType, float value) {
-        ensureOneBlockStructureReady();
-        return super.updateSmartInterfaceValue(interfaceType, value);
-    }
-
     @Nullable
     public MachineDefinition resolveDefinitionFromBlock() {
         if (world == null || pos == null || !world.isBlockLoaded(pos)) {
