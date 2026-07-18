@@ -269,7 +269,6 @@ public final class ClientGuiValidationRunner {
         if (!isClientTileReady(tile, "client_tile_not_ready_before_open")) {
             return;
         }
-
         MinecraftServer server = FMLCommonHandler.instance().getMinecraftServerInstance();
         if (server == null) {
             return;
@@ -318,9 +317,21 @@ public final class ClientGuiValidationRunner {
                 this.asyncFailureReason = "server_open_tile_unexpected:" + className(tile);
                 return;
             }
+            TileSingleBlockMachineController controller = (TileSingleBlockMachineController) tile;
+            if (!controller.isStructureFormed() || controller.getFoundMachine() == null) {
+                this.requestedGuiOpen = false;
+                MMCEOneBlock.log.info(
+                    "[MMCE One Block ClientGuiValidation] waiting for server controller formation id={} formed={} machine={}",
+                    TARGET_ID,
+                    controller.isStructureFormed(),
+                    controller.getFoundMachine() == null ? "missing" : controller.getFoundMachine().getRegistryName()
+                );
+                return;
+            }
 
             player.openGui(MMCEOneBlock.instance, GuiHandler.GUI_SINGLE_BLOCK_CONTROLLER,
                 world, this.pos.getX(), this.pos.getY(), this.pos.getZ());
+            this.openedAt = this.ticks;
             MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] requested server GUI open id={} pos={}",
                 TARGET_ID, this.pos);
         } catch (RuntimeException ex) {
