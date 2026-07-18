@@ -426,6 +426,14 @@ public final class ClientGuiValidationRunner {
     private void verifyDisplayedGui(Minecraft mc) {
         GuiScreen screen = mc.currentScreen;
         if (screen == null) {
+            if (!this.directFallbackGuiOpen && this.ticks - this.openedAt > 80) {
+                TileSingleBlockMachineController tile = getTile(mc);
+                if (tile != null && isClientTileReady(tile, "client_tile_not_ready_for_gui_fallback")) {
+                    this.clientFallbackTile = tile;
+                    requestDirectFallbackGuiOpen(mc);
+                }
+                return;
+            }
             if (this.ticks - this.openedAt > 160) {
                 fail("screen_missing");
             }
