@@ -165,18 +165,14 @@ jobs:
           optional_advanced = root / "examples/optional/advanced_mana_pool_controller.json"
           machines = sorted(machine_dir.glob("*.json"))
           assert [file.name for file in machines] == [
-              "advanced_mana_pool_controller.json",
               "starter_controller.json",
               "starter_factory_controller.json",
           ]
-          assert len(machines) == 3
+          assert len(machines) == 2
           for file in machines:
               json.loads(file.read_text(encoding="utf-8-sig"))
 
-          advanced = json.loads(
-              (machine_dir / "advanced_mana_pool_controller.json").read_text(encoding="utf-8-sig")
-          )
-          assert advanced == json.loads(optional_advanced.read_text(encoding="utf-8-sig"))
+          advanced = json.loads(optional_advanced.read_text(encoding="utf-8-sig"))
 
           starter = json.loads(
               (machine_dir / "starter_controller.json").read_text(encoding="utf-8-sig")

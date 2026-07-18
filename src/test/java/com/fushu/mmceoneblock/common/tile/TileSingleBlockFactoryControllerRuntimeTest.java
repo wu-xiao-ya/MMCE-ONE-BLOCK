@@ -42,10 +42,9 @@ public final class TileSingleBlockFactoryControllerRuntimeTest {
             output.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY)
                 .getCompoundTag("energy_in").getLong("energy")
         );
-        assertTrue(output.hasKey("oneBlockFluid"));
+        assertFalse(output.hasKey("oneBlockFluid"));
         assertFalse(output.hasKey("oneBlockGas"));
-        assertTrue(output.hasKey("oneBlockEnergy"));
-        assertEquals(600L, output.getLong("oneBlockEnergy"));
+        assertFalse(output.hasKey("oneBlockEnergy"));
     }
 
     private static MachineDefinition factoryDefinition() {

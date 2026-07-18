@@ -15,7 +15,6 @@ if (-not (Test-Path -LiteralPath $FixtureRoot)) {
 }
 
 $expected = @(
-    'advanced_mana_pool_controller.json',
     'starter_controller.json',
     'starter_factory_controller.json'
 )

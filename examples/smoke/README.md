@@ -49,10 +49,9 @@ The fixture includes:
 
 - `config/modularmachinery/machinery/starter_machine.json` - a tiny backing MMCE machine so MMCE One Block can resolve `machine: starter_machine`.
 - `config/modularmachinery/recipes/starter_machine_cobblestone_to_stone.json` - a one-input, one-output recipe for smoke testing.
-- `config/mmce-one-block/machines/advanced_mana_pool_controller.json` - the advanced mana-pool definition used for model-state and fluid-ratio coverage.
 - `config/mmce-one-block/machines/starter_controller.json` - the single-block controller definition.
 - `config/mmce-one-block/machines/starter_factory_controller.json` - a forced factory-controller definition for exercising the true MMCE factory container path.
-- `../optional/advanced_mana_pool_controller.json` - pack-facing mirror of the advanced mana-pool smoke definition.
+- `../optional/advanced_mana_pool_controller.json` - optional advanced mana-pool sample for model-state and fluid-ratio coverage; it stays outside the default smoke set.
 - `config/mmceguiext/styles/starter_controller.json` - standalone MMCEGE style keyed by `mmceoneblock:starter_controller`, with text, button, progress bar, dynamic visual, slot group, and player inventory entries.
 - `config/mmceguiext/styles/factory_controller.json` - standalone MMCEGE factory style keyed by `mmceoneblock:factory_controller`, with input/output/blueprint layout, thread tooltip mode, and a subGUI entry button.
 - `config/mmceguiext/subgui/factory_threads.json` - draggable modal factory-thread panel using MMCEGE's native visible thread queue.
