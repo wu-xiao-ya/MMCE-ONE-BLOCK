@@ -12,7 +12,6 @@ $logDir = Split-Path -Parent $logPath
 $fixtureRoot = Join-Path $repoRoot 'examples\smoke\config\mmce-one-block\machines'
 $machineCount = [int](& (Join-Path $scriptDir 'Get-SmokeMachineCount.ps1'))
 $expectedFixtures = @(
-    'advanced_mana_pool_controller.json',
     'starter_controller.json',
     'starter_factory_controller.json'
 )

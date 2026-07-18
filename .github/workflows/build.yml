@@ -12,7 +12,7 @@ on:
       mmcege_ref:
         description: Exact MMCEGE commit SHA
         required: false
-        default: bf28dc9ad932dbdb8dc1172969bc7a5b02399141
+        default: 394cc57269518c7ef343cf2d9a4c119c62241929
       mmce_repo:
         description: Modular Machinery CE repository slug used only for the Gradle wrapper/reference checkout
         required: false
@@ -45,10 +45,10 @@ jobs:
         id: mmcege_ref
         shell: bash
         env:
-          EXPECTED_MMCEGE_SHA: bf28dc9ad932dbdb8dc1172969bc7a5b02399141
+          EXPECTED_MMCEGE_SHA: 394cc57269518c7ef343cf2d9a4c119c62241929
         run: |
           repo="${{ github.event.inputs.mmcege_repo || 'wu-xiao-ya/Modular-Machinery-Community-Edition-Gui-Edit' }}"
-          requested="${{ github.event.inputs.mmcege_ref || 'bf28dc9ad932dbdb8dc1172969bc7a5b02399141' }}"
+          requested="${{ github.event.inputs.mmcege_ref || '394cc57269518c7ef343cf2d9a4c119c62241929' }}"
           if [ "$requested" != "$EXPECTED_MMCEGE_SHA" ]; then
             echo "MMCEGE must stay pinned to $EXPECTED_MMCEGE_SHA; got '$requested'." >&2
             exit 1
@@ -165,18 +165,14 @@ jobs:
           optional_advanced = root / "examples/optional/advanced_mana_pool_controller.json"
           machines = sorted(machine_dir.glob("*.json"))
           assert [file.name for file in machines] == [
-              "advanced_mana_pool_controller.json",
               "starter_controller.json",
               "starter_factory_controller.json",
           ]
-          assert len(machines) == 3
+          assert len(machines) == 2
           for file in machines:
               json.loads(file.read_text(encoding="utf-8-sig"))
 
-          advanced = json.loads(
-              (machine_dir / "advanced_mana_pool_controller.json").read_text(encoding="utf-8-sig")
-          )
-          assert advanced == json.loads(optional_advanced.read_text(encoding="utf-8-sig"))
+          advanced = json.loads(optional_advanced.read_text(encoding="utf-8-sig"))
 
           starter = json.loads(
               (machine_dir / "starter_controller.json").read_text(encoding="utf-8-sig")

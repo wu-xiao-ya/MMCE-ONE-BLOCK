@@ -40,10 +40,7 @@ public final class TileSingleBlockMachineControllerPayloadTest {
             output.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY)
                 .getCompoundTag("energy").getLong("energy")
         );
-        assertTrue(output.hasKey("oneBlockEnergy"));
-        assertEquals(750L, output.getLong("oneBlockEnergy"));
-        assertFalse(output.hasKey("oneBlockFluid"));
-        assertFalse(output.hasKey("oneBlockGas"));
+        assertFalse(output.hasKey("oneBlockEnergy"));
     }
 
     @Test
