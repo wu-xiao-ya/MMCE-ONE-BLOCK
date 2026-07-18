@@ -14,7 +14,7 @@ The upstream MMCE code stays read-only. The extension surface this addon needs l
 
 ## Recommended flow
 
-1. Check out MMCEGE at the exact SHA `d4533060f8bab0470746cc230018e96e6a2b6d0d` first.
+1. Check out MMCEGE at the exact SHA `5d179b2997585cba8d8e252e9bc7c467d1628374` first.
 2. Keep the backing MMCE machine JSON in `config/modularmachinery/machinery/`.
 3. Copy `examples/one-block-machine.json` into `config/mmce-one-block/machines/`.
 4. Copy `examples/client.cfg.sample` to `config/mmceguiext/client.cfg` if you want the sample client defaults.
