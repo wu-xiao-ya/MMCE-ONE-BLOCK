@@ -71,6 +71,13 @@ public class TileSingleBlockMachineController extends TileMachineController
         return id.isEmpty() ? null : MachineRegistry.getDefinition(id);
     }
 
+    public boolean ensureOneBlockStructureReady() {
+        if (world != null && !world.isRemote) {
+            checkStructure();
+        }
+        return isStructureFormed() && getFoundMachine() != null;
+    }
+
     @Nullable
     public MachineDefinition resolveDefinitionFromBlock() {
         if (world == null || pos == null || !world.isBlockLoaded(pos)) {

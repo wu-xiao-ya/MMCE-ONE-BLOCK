@@ -92,6 +92,13 @@ public class TileSingleBlockFactoryController extends TileFactoryController
         return id.isEmpty() ? null : MachineRegistry.getDefinition(id);
     }
 
+    public boolean ensureOneBlockStructureReady() {
+        if (world != null && !world.isRemote) {
+            checkStructure();
+        }
+        return isStructureFormed() && getFoundMachine() != null;
+    }
+
     @Override
     protected boolean canCheckStructure() {
         return getDefinition() != null;

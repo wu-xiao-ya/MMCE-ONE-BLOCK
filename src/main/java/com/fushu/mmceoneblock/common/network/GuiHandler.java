@@ -54,13 +54,17 @@ public class GuiHandler implements IGuiHandler {
             if (!isSingleBlockFactoryControllerTile(tile)) {
                 return null;
             }
-            return createFactoryContainer((TileSingleBlockFactoryController) tile, player);
+            TileSingleBlockFactoryController controller = (TileSingleBlockFactoryController) tile;
+            controller.ensureOneBlockStructureReady();
+            return createFactoryContainer(controller, player);
         }
         if (id == GUI_SINGLE_BLOCK_CONTROLLER) {
             if (!isSingleBlockMachineControllerTile(tile)) {
                 return null;
             }
-            return new ContainerSingleBlockController((TileSingleBlockMachineController) tile, player);
+            TileSingleBlockMachineController controller = (TileSingleBlockMachineController) tile;
+            controller.ensureOneBlockStructureReady();
+            return new ContainerSingleBlockController(controller, player);
         }
         return null;
     }

@@ -71,6 +71,24 @@ public final class GuiHandlerTest {
         ));
     }
 
+    @Test(expected = StructurePreparationRequested.class)
+    public void serverMachineGuiPreparesStructureBeforeCreatingContainer() {
+        GuiHandler.createServerGuiElement(
+            GuiHandler.GUI_SINGLE_BLOCK_CONTROLLER,
+            new StructurePreparingMachineTile(),
+            null
+        );
+    }
+
+    @Test(expected = StructurePreparationRequested.class)
+    public void serverFactoryGuiPreparesStructureBeforeCreatingContainer() {
+        GuiHandler.createServerGuiElement(
+            GuiHandler.GUI_SINGLE_BLOCK_FACTORY_CONTROLLER,
+            new StructurePreparingFactoryTile(),
+            null
+        );
+    }
+
     @Test
     public void bridgeLookupCachesResolvedClassAndMethods() {
         GuiHandler.ClientGuiBridgeLookup lookup = GuiHandler.getClientGuiBridgeLookup();
@@ -96,5 +114,23 @@ public final class GuiHandlerTest {
     }
 
     private static final class DerivedFactoryTile extends TileSingleBlockFactoryController {
+    }
+
+    private static final class StructurePreparingMachineTile extends TileSingleBlockMachineController {
+        @Override
+        public boolean ensureOneBlockStructureReady() {
+            throw new StructurePreparationRequested();
+        }
+    }
+
+    private static final class StructurePreparingFactoryTile extends TileSingleBlockFactoryController {
+        @Override
+        public boolean ensureOneBlockStructureReady() {
+            throw new StructurePreparationRequested();
+        }
+    }
+
+    private static final class StructurePreparationRequested extends RuntimeException {
+        private static final long serialVersionUID = 1L;
     }
 }
