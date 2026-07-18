@@ -205,6 +205,7 @@ public final class ClientGuiValidationRunner {
 
             ((TileSingleBlockMachineController) tile).setDefinitionId(TARGET_ID);
             tile.markDirty();
+            tile.markForUpdateSync();
             world.notifyBlockUpdate(this.pos, oldState, state, 3);
             player.connection.setPlayerLocation(
                 this.pos.getX() + 0.5D,
@@ -225,7 +226,7 @@ public final class ClientGuiValidationRunner {
         TileSingleBlockMachineController tile = getValidationTile(mc);
         if (tile == null) {
             this.clientTileReadySince = 0;
-            if (!this.installedClientFallback && this.ticks - this.placedAt > 80) {
+            if (!this.installedClientFallback && this.ticks - this.placedAt > 300) {
                 installClientFallbackTile(mc);
                 tile = getValidationTile(mc);
             }
