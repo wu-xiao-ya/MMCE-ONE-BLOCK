@@ -6,8 +6,8 @@ This folder holds the pack-facing sample files for MMCE One Block.
 
 - `one-block-machine.json` - addon machine definition for `config/mmce-one-block/machines/`
 - `client.cfg.sample` - client config sample with the MMCEGE keys this pack expects
-- `smoke/` - two-machine runtime fixture for local `runClient` / `runServer` checks (`starter_controller`, `starter_factory_controller`)
-- `optional/advanced_mana_pool_controller.json` - optional pack-facing advanced mana pool sample showing state models and fluid-driven `textureLevels`
+- `smoke/` - three-machine runtime fixture for local `runClient` / `runServer` checks (`advanced_mana_pool_controller`, `starter_controller`, `starter_factory_controller`)
+- `optional/advanced_mana_pool_controller.json` - pack-facing mirror of the smoke advanced mana pool sample showing state models and fluid-driven `textureLevels`
 
 ## Install order
 

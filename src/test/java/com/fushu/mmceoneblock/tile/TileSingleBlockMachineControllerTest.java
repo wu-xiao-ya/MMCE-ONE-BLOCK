@@ -170,9 +170,10 @@ public final class TileSingleBlockMachineControllerTest {
         NBTTagCompound payload = new NBTTagCompound();
         tile.writeCustomNBT(payload);
         assertTrue(payload.hasKey(MachineComponentStorage.COMPONENTS_NBT_KEY));
-        assertFalse(payload.hasKey("oneBlockFluid"));
-        assertFalse(payload.hasKey("oneBlockGas"));
-        assertFalse(payload.hasKey("oneBlockEnergy"));
+        assertTrue(payload.hasKey("oneBlockFluid"));
+        assertTrue(payload.hasKey("oneBlockGas"));
+        assertTrue(payload.hasKey("oneBlockEnergy"));
+        assertEquals(25000L, payload.getLong("oneBlockEnergy"));
     }
 
     private static MachineDefinition machineDefinition() {
