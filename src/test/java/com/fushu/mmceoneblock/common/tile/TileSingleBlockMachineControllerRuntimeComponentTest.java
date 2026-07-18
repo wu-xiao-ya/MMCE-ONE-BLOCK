@@ -60,7 +60,8 @@ public final class TileSingleBlockMachineControllerRuntimeComponentTest {
             payload.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY)
                 .getCompoundTag("water_in").getInteger("Amount")
         );
-        assertFalse(payload.hasKey("oneBlockFluid"));
+        assertTrue(payload.hasKey("oneBlockFluid"));
+        assertEquals(400, payload.getCompoundTag("oneBlockFluid").getInteger("Amount"));
     }
 
     @Test
@@ -106,7 +107,8 @@ public final class TileSingleBlockMachineControllerRuntimeComponentTest {
         NBTTagCompound migrated = new NBTTagCompound();
         tile.writeOneBlockPayload(migrated);
         assertTrue(migrated.hasKey(MachineComponentStorage.COMPONENTS_NBT_KEY));
-        assertFalse(migrated.hasKey("oneBlockEnergy"));
+        assertTrue(migrated.hasKey("oneBlockEnergy"));
+        assertEquals(750L, migrated.getLong("oneBlockEnergy"));
         assertEquals(
             750L,
             migrated.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY)
@@ -135,7 +137,8 @@ public final class TileSingleBlockMachineControllerRuntimeComponentTest {
         NBTTagCompound migrated = new NBTTagCompound();
         tile.writeOneBlockPayload(migrated);
         assertTrue(migrated.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY).hasKey("primary"));
-        assertFalse(migrated.hasKey("oneBlockFluid"));
+        assertTrue(migrated.hasKey("oneBlockFluid"));
+        assertEquals(400, migrated.getCompoundTag("oneBlockFluid").getInteger("Amount"));
     }
 
     @Test
@@ -159,7 +162,7 @@ public final class TileSingleBlockMachineControllerRuntimeComponentTest {
         NBTTagCompound migrated = new NBTTagCompound();
         tile.writeOneBlockPayload(migrated);
         assertTrue(migrated.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY).hasKey("primary"));
-        assertFalse(migrated.hasKey("oneBlockGas"));
+        assertTrue(migrated.hasKey("oneBlockGas"));
     }
 
     @Test

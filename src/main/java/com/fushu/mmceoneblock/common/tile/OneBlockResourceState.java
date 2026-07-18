@@ -79,7 +79,7 @@ final class OneBlockResourceState {
                 unclaimedComponentData.copy()
             );
         }
-        removeLegacyPayload(compound);
+        writeLegacyPayload(compound);
     }
 
     boolean isEmpty() {
@@ -303,10 +303,27 @@ final class OneBlockResourceState {
         }
     }
 
-    private static void removeLegacyPayload(NBTTagCompound compound) {
-        compound.removeTag("oneBlockFluid");
-        compound.removeTag("oneBlockGas");
-        compound.removeTag("oneBlockEnergy");
+    private void writeLegacyPayload(NBTTagCompound compound) {
+        FluidRuntime fluid = firstFluidRuntime();
+        if (fluid == null) {
+            compound.removeTag("oneBlockFluid");
+        } else {
+            compound.setTag("oneBlockFluid", fluid.tank.writeToNBT(new NBTTagCompound()));
+        }
+
+        GasRuntime gas = firstGasRuntime();
+        if (gas == null) {
+            compound.removeTag("oneBlockGas");
+        } else {
+            gas.tank.writeToNBT(compound, "oneBlockGas");
+        }
+
+        EnergyRuntime energy = firstEnergyRuntime();
+        if (energy == null) {
+            compound.removeTag("oneBlockEnergy");
+        } else {
+            compound.setLong("oneBlockEnergy", energy.handler.getCurrentEnergy());
+        }
     }
 
     @Nullable
