@@ -268,7 +268,7 @@ jobs:
           ./gradlew -p ../mmce-one-block --no-daemon --no-parallel --console=plain -PmodularMachineryCurse="$MODULAR_MACHINERY_CURSE" -PmmceGuiExtMaven="$MMCEGE_MAVEN" build --stacktrace
 
       - name: Prepare smoke fixture
-        if: ${{ env.RUN_SMOKE == 'true' }}
+        if: ${{ env.RUN_SMOKE == 'true' || env.RUN_CLIENT_SMOKE == 'true' }}
         shell: bash
         working-directory: mmce-one-block
         run: |
