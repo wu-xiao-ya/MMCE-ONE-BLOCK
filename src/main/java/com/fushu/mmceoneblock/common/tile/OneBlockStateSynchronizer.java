@@ -3,11 +3,14 @@ package com.fushu.mmceoneblock.common.tile;
 import net.minecraft.nbt.NBTTagCompound;
 
 import java.util.ArrayList;
+import java.util.List;
 
 final class OneBlockStateSynchronizer {
     private final MachineComponentStorage.Host host;
     private final MachineComponentStorage storage;
     private long lastFingerprint = Long.MIN_VALUE;
+    private int restoreDepth;
+    private boolean resourceChangedDuringRestore;
 
     OneBlockStateSynchronizer(MachineComponentStorage.Host host,
                               MachineComponentStorage storage) {
@@ -15,16 +18,43 @@ final class OneBlockStateSynchronizer {
         this.storage = storage;
     }
 
-    void reset() {
+    synchronized void reset() {
         lastFingerprint = Long.MIN_VALUE;
     }
 
-    void onResourceChanged() {
+    synchronized void beginRestore() {
+        restoreDepth++;
+    }
+
+    synchronized void endRestore() {
+        if (restoreDepth <= 0) {
+            throw new IllegalStateException("restore transaction is not active");
+        }
+        restoreDepth--;
+        if (restoreDepth > 0) {
+            return;
+        }
+        if (resourceChangedDuringRestore) {
+            resourceChangedDuringRestore = false;
+            host.markStorageDirty();
+        }
+        lastFingerprint = Long.MIN_VALUE;
+        updateOneBlockCustomData(false);
+    }
+
+    synchronized void onResourceChanged() {
+        if (restoreDepth > 0) {
+            resourceChangedDuringRestore = true;
+            return;
+        }
         host.markStorageDirty();
         updateOneBlockCustomData(true);
     }
 
-    void updateOneBlockCustomData(boolean notifyClient) {
+    synchronized void updateOneBlockCustomData(boolean notifyClient) {
+        if (restoreDepth > 0) {
+            return;
+        }
         NBTTagCompound tag = host.getCustomDataTag();
         if (tag == null) {
             tag = new NBTTagCompound();
@@ -39,7 +69,8 @@ final class OneBlockStateSynchronizer {
         Aggregate fluid = new Aggregate();
         Aggregate gas = new Aggregate();
         Aggregate energy = new Aggregate();
-        for (OneBlockResourceState.ComponentSnapshot snapshot : storage.snapshots()) {
+        List<OneBlockResourceState.ComponentSnapshot> snapshots = storage.snapshots();
+        for (OneBlockResourceState.ComponentSnapshot snapshot : snapshots) {
             String prefix = "oneblock.component." + snapshot.id + ".";
             tag.setLong(prefix + "amount", snapshot.amount);
             tag.setLong(prefix + "capacity", snapshot.capacity);
@@ -75,7 +106,7 @@ final class OneBlockStateSynchronizer {
         tag.setInteger("oneblock.threads.active", activeThreads);
         tag.setInteger("oneblock.threads.max", maxThreads);
 
-        long fingerprint = storage.runtimeFingerprint();
+        long fingerprint = runtimeFingerprint(snapshots);
         fingerprint = 31L * fingerprint + (formed ? 1L : 0L);
         fingerprint = 31L * fingerprint + (working ? 1L : 0L);
         fingerprint = 31L * fingerprint + activeThreads;
@@ -85,6 +116,22 @@ final class OneBlockStateSynchronizer {
         if (notifyClient && changed) {
             host.markStorageForUpdate();
         }
+    }
+
+    private static long runtimeFingerprint(
+        List<OneBlockResourceState.ComponentSnapshot> snapshots
+    ) {
+        long result = 17L;
+        for (OneBlockResourceState.ComponentSnapshot snapshot : snapshots) {
+            result = 31L * result + snapshot.id.hashCode();
+            result = 31L * result + snapshot.kind.hashCode();
+            result = 31L * result + snapshot.amount;
+            result = 31L * result + snapshot.capacity;
+            result = 31L * result + snapshot.itemCount;
+            result = 31L * result + snapshot.occupiedSlots;
+            result = 31L * result + snapshot.name.hashCode();
+        }
+        return result;
     }
 
     private static void publishAggregate(NBTTagCompound tag,

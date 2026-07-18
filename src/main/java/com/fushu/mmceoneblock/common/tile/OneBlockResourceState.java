@@ -32,17 +32,17 @@ final class OneBlockResourceState {
         new LinkedHashMap<String, ComponentRuntime>();
     private NBTTagCompound unclaimedComponentData = new NBTTagCompound();
     @Nullable
-    private Runnable changeListener;
+    private volatile Runnable changeListener;
 
     OneBlockResourceState(MachineComponentStorage.Host host) {
         this.host = host;
     }
 
-    void setChangeListener(@Nullable Runnable listener) {
+    synchronized void setChangeListener(@Nullable Runnable listener) {
         this.changeListener = listener;
     }
 
-    void rebuild(MachineDefinition definition, boolean positionalFallback) {
+    synchronized void rebuild(MachineDefinition definition, boolean positionalFallback) {
         NBTTagCompound carried = mergeCompounds(unclaimedComponentData, writeCurrentComponentData());
         IOInventory previousInventory = host.getInventory();
         ItemStack previousBlueprint = previousInventory == null
@@ -57,7 +57,7 @@ final class OneBlockResourceState {
         loadComponentData(carried, true);
     }
 
-    void readPayload(NBTTagCompound compound) {
+    synchronized void readPayload(NBTTagCompound compound) {
         unclaimedComponentData = compound.hasKey(MachineComponentStorage.UNCLAIMED_COMPONENTS_NBT_KEY)
             ? (NBTTagCompound) compound.getCompoundTag(MachineComponentStorage.UNCLAIMED_COMPONENTS_NBT_KEY).copy()
             : new NBTTagCompound();
@@ -69,7 +69,7 @@ final class OneBlockResourceState {
         migrateLegacyPayload(compound, current);
     }
 
-    void writePayload(NBTTagCompound compound) {
+    synchronized void writePayload(NBTTagCompound compound) {
         compound.setTag(MachineComponentStorage.COMPONENTS_NBT_KEY, writeCurrentComponentData());
         if (unclaimedComponentData.isEmpty()) {
             compound.removeTag(MachineComponentStorage.UNCLAIMED_COMPONENTS_NBT_KEY);
@@ -82,47 +82,47 @@ final class OneBlockResourceState {
         writeLegacyPayload(compound);
     }
 
-    boolean isEmpty() {
+    synchronized boolean isEmpty() {
         return runtimes.isEmpty();
     }
 
-    List<ComponentRuntime> runtimes() {
+    synchronized List<ComponentRuntime> runtimes() {
         return new ArrayList<ComponentRuntime>(runtimes.values());
     }
 
-    int getItemInputSlotCount() {
+    synchronized int getItemInputSlotCount() {
         return collectItemSlots(IOType.INPUT).length;
     }
 
-    boolean isItemInputInventorySlot(int slot) {
+    synchronized boolean isItemInputInventorySlot(int slot) {
         return containsSlot(collectItemSlots(IOType.INPUT), slot);
     }
 
-    int[] getItemInputSlots() {
+    synchronized int[] getItemInputSlots() {
         return collectItemSlots(IOType.INPUT);
     }
 
-    int[] getItemOutputSlots() {
+    synchronized int[] getItemOutputSlots() {
         return collectItemSlots(IOType.OUTPUT);
     }
 
-    List<ItemRuntime> itemRuntimes() {
+    synchronized List<ItemRuntime> itemRuntimes() {
         return runtimesOfType(ItemRuntime.class);
     }
 
-    List<FluidRuntime> fluidRuntimes() {
+    synchronized List<FluidRuntime> fluidRuntimes() {
         return runtimesOfType(FluidRuntime.class);
     }
 
-    List<GasRuntime> gasRuntimes() {
+    synchronized List<GasRuntime> gasRuntimes() {
         return runtimesOfType(GasRuntime.class);
     }
 
-    List<EnergyRuntime> energyRuntimes() {
+    synchronized List<EnergyRuntime> energyRuntimes() {
         return runtimesOfType(EnergyRuntime.class);
     }
 
-    List<ComponentSnapshot> snapshots() {
+    synchronized List<ComponentSnapshot> snapshots() {
         List<ComponentSnapshot> out = new ArrayList<ComponentSnapshot>(runtimes.size());
         for (ComponentRuntime runtime : runtimes.values()) {
             out.add(runtime.snapshot());
@@ -130,21 +130,7 @@ final class OneBlockResourceState {
         return out;
     }
 
-    long runtimeFingerprint() {
-        long result = 17L;
-        for (ComponentSnapshot snapshot : snapshots()) {
-            result = 31L * result + snapshot.id.hashCode();
-            result = 31L * result + snapshot.kind.hashCode();
-            result = 31L * result + snapshot.amount;
-            result = 31L * result + snapshot.capacity;
-            result = 31L * result + snapshot.itemCount;
-            result = 31L * result + snapshot.occupiedSlots;
-            result = 31L * result + snapshot.name.hashCode();
-        }
-        return result;
-    }
-
-    private <T extends ComponentRuntime> List<T> runtimesOfType(Class<T> type) {
+    private synchronized <T extends ComponentRuntime> List<T> runtimesOfType(Class<T> type) {
         List<T> out = new ArrayList<T>();
         for (ComponentRuntime runtime : runtimes.values()) {
             if (type.isInstance(runtime)) {
@@ -721,86 +707,116 @@ final class OneBlockResourceState {
             this.capacity = Math.max(1L, capacity);
         }
 
-        synchronized void loadCurrentEnergy(long energy) {
-            this.energy = Math.max(0L, Math.min(capacity, energy));
+        void loadCurrentEnergy(long energy) {
+            synchronized (OneBlockResourceState.this) {
+                this.energy = Math.max(0L, Math.min(capacity, energy));
+            }
         }
 
         @Override
-        public synchronized long getCurrentEnergy() {
-            return energy;
+        public long getCurrentEnergy() {
+            synchronized (OneBlockResourceState.this) {
+                return energy;
+            }
         }
 
         @Override
-        public synchronized void setCurrentEnergy(long energy) {
-            long updated = Math.max(0L, Math.min(capacity, energy));
-            if (this.energy != updated) {
-                this.energy = updated;
+        public void setCurrentEnergy(long energy) {
+            boolean changed;
+            synchronized (OneBlockResourceState.this) {
+                long updated = Math.max(0L, Math.min(capacity, energy));
+                changed = this.energy != updated;
+                if (changed) {
+                    this.energy = updated;
+                }
+            }
+            if (changed) {
                 notifyContentsChanged();
             }
         }
 
         @Override
-        public synchronized long getMaxEnergy() {
+        public long getMaxEnergy() {
             return capacity;
         }
 
         @Override
-        public synchronized boolean extractEnergy(long amount) {
-            if (amount < 0L || energy < amount) {
-                return false;
+        public boolean extractEnergy(long amount) {
+            boolean changed;
+            synchronized (OneBlockResourceState.this) {
+                if (amount < 0L || energy < amount) {
+                    return false;
+                }
+                energy -= amount;
+                changed = amount > 0L;
             }
-            energy -= amount;
-            if (amount > 0L) {
+            if (changed) {
                 notifyContentsChanged();
             }
             return true;
         }
 
         @Override
-        public synchronized boolean receiveEnergy(long amount) {
-            if (amount < 0L || capacity - energy < amount) {
-                return false;
+        public boolean receiveEnergy(long amount) {
+            boolean changed;
+            synchronized (OneBlockResourceState.this) {
+                if (amount < 0L || capacity - energy < amount) {
+                    return false;
+                }
+                energy += amount;
+                changed = amount > 0L;
             }
-            energy += amount;
-            if (amount > 0L) {
+            if (changed) {
                 notifyContentsChanged();
             }
             return true;
         }
 
         @Override
-        public synchronized int receiveEnergy(int maxReceive, boolean simulate) {
-            int accepted = (int) Math.min(
-                Math.max(0, maxReceive),
-                Math.min(Integer.MAX_VALUE, capacity - energy)
-            );
+        public int receiveEnergy(int maxReceive, boolean simulate) {
+            int accepted;
+            synchronized (OneBlockResourceState.this) {
+                accepted = (int) Math.min(
+                    Math.max(0, maxReceive),
+                    Math.min(Integer.MAX_VALUE, capacity - energy)
+                );
+                if (!simulate && accepted > 0) {
+                    energy += accepted;
+                }
+            }
             if (!simulate && accepted > 0) {
-                energy += accepted;
                 notifyContentsChanged();
             }
             return accepted;
         }
 
         @Override
-        public synchronized int extractEnergy(int maxExtract, boolean simulate) {
-            int extracted = (int) Math.min(
-                Math.max(0, maxExtract),
-                Math.min(Integer.MAX_VALUE, energy)
-            );
+        public int extractEnergy(int maxExtract, boolean simulate) {
+            int extracted;
+            synchronized (OneBlockResourceState.this) {
+                extracted = (int) Math.min(
+                    Math.max(0, maxExtract),
+                    Math.min(Integer.MAX_VALUE, energy)
+                );
+                if (!simulate && extracted > 0) {
+                    energy -= extracted;
+                }
+            }
             if (!simulate && extracted > 0) {
-                energy -= extracted;
                 notifyContentsChanged();
             }
             return extracted;
         }
 
         @Override
-        public synchronized int getEnergyStored() {
-            return (int) Math.min(Integer.MAX_VALUE, energy);
+        public int getEnergyStored() {
+            synchronized (OneBlockResourceState.this) {
+                return (int) Math.min(Integer.MAX_VALUE, energy);
+            }
         }
 
         @Override
-        public synchronized int getMaxEnergyStored() {
+        public int getMaxEnergyStored() {
             return (int) Math.min(Integer.MAX_VALUE, capacity);
         }
 

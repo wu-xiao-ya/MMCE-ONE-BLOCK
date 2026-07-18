@@ -61,11 +61,11 @@ public final class MachineComponentStorage {
         this.runtimeComponents = new OneBlockRuntimeComponents(host, resources);
     }
 
-    void setChangeListener(@Nullable Runnable listener) {
+    synchronized void setChangeListener(@Nullable Runnable listener) {
         resources.setChangeListener(listener);
     }
 
-    public void setDefinitionId(@Nullable String id) {
+    public synchronized void setDefinitionId(@Nullable String id) {
         String normalized = OneBlockResourceState.normalizePath(id);
         if (!normalized.equals(definitionId)) {
             definitionId = normalized;
@@ -73,7 +73,7 @@ public final class MachineComponentStorage {
         }
     }
 
-    public String getDefinitionId() {
+    public synchronized String getDefinitionId() {
         return definitionId;
     }
 
@@ -81,13 +81,13 @@ public final class MachineComponentStorage {
         return componentGroupId;
     }
 
-    public void clearTransientComponentCache() {
+    public synchronized void clearTransientComponentCache() {
         definitionSignature = "";
         cachedComponents = Collections.emptyList();
     }
 
     @Nonnull
-    public Collection<MachineComponent<?>> provideMachineComponents() {
+    public synchronized Collection<MachineComponent<?>> provideMachineComponents() {
         MachineDefinition definition = host.getDefinition();
         if (definition == null) {
             return Collections.emptyList();
@@ -96,7 +96,7 @@ public final class MachineComponentStorage {
         return cachedComponents;
     }
 
-    void syncDefinition(MachineDefinition definition) {
+    synchronized void syncDefinition(MachineDefinition definition) {
         String signature = buildDefinitionSignature(definition);
         if (signature.equals(definitionSignature)) {
             return;
@@ -107,7 +107,7 @@ public final class MachineComponentStorage {
         definitionSignature = signature;
     }
 
-    void readPayload(NBTTagCompound compound) {
+    synchronized void readPayload(NBTTagCompound compound) {
         MachineDefinition definition = host.getDefinition();
         if (definition != null) {
             syncDefinition(definition);
@@ -115,44 +115,40 @@ public final class MachineComponentStorage {
         resources.readPayload(compound);
     }
 
-    void writePayload(NBTTagCompound compound) {
+    synchronized void writePayload(NBTTagCompound compound) {
         resources.writePayload(compound);
     }
 
-    int getItemInputSlotCount() {
+    synchronized int getItemInputSlotCount() {
         return resources.getItemInputSlotCount();
     }
 
-    boolean isItemInputInventorySlot(int slot) {
+    synchronized boolean isItemInputInventorySlot(int slot) {
         return resources.isItemInputInventorySlot(slot);
     }
 
-    int[] getItemInputSlots() {
+    synchronized int[] getItemInputSlots() {
         return resources.getItemInputSlots();
     }
 
-    int[] getItemOutputSlots() {
+    synchronized int[] getItemOutputSlots() {
         return resources.getItemOutputSlots();
     }
 
-    List<OneBlockResourceState.FluidRuntime> fluidRuntimes() {
+    synchronized List<OneBlockResourceState.FluidRuntime> fluidRuntimes() {
         return resources.fluidRuntimes();
     }
 
-    List<OneBlockResourceState.GasRuntime> gasRuntimes() {
+    synchronized List<OneBlockResourceState.GasRuntime> gasRuntimes() {
         return resources.gasRuntimes();
     }
 
-    List<OneBlockResourceState.EnergyRuntime> energyRuntimes() {
+    synchronized List<OneBlockResourceState.EnergyRuntime> energyRuntimes() {
         return resources.energyRuntimes();
     }
 
-    List<OneBlockResourceState.ComponentSnapshot> snapshots() {
+    synchronized List<OneBlockResourceState.ComponentSnapshot> snapshots() {
         return resources.snapshots();
-    }
-
-    long runtimeFingerprint() {
-        return resources.runtimeFingerprint();
     }
 
     private String buildDefinitionSignature(MachineDefinition definition) {

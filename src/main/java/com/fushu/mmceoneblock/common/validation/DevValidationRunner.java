@@ -284,11 +284,14 @@ public final class DevValidationRunner {
 
     private boolean validateNbtPayload(TileSingleBlockMachineController tile) {
         IEnergyHandlerAsync energy = findEnergy(tile.provideMachineComponents());
-        if (energy != null) {
-            energy.setCurrentEnergy(EXPECTED_ENERGY);
-            this.state.expectedEnergy = EXPECTED_ENERGY;
-            this.state.energySeeded = true;
+        if (energy == null) {
+            fail("energy_component_missing_before_save");
+            return false;
         }
+        energy.setCurrentEnergy(EXPECTED_ENERGY);
+        this.state.expectedEnergy = EXPECTED_ENERGY;
+        this.state.energySeeded = true;
+
         NBTTagCompound tag = new NBTTagCompound();
         tile.writeToNBT(tag);
         if (!TARGET_ID.equals(tag.getString("definitionId"))) {
@@ -298,6 +301,9 @@ public final class DevValidationRunner {
         if (!tag.hasKey(MachineComponentStorage.COMPONENTS_NBT_KEY)
             || !tag.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY).hasKey("energy_in")) {
             fail("nbt_payload_missing");
+            return false;
+        }
+        if (!validateEnergySnapshot("initial_payload", energy, tag)) {
             return false;
         }
         this.state.nbtPayload = true;
@@ -310,6 +316,12 @@ public final class DevValidationRunner {
             return;
         }
         tile.markDirty();
+        IEnergyHandlerAsync energy = findEnergy(tile.provideMachineComponents());
+        NBTTagCompound beforeSave = new NBTTagCompound();
+        tile.writeToNBT(beforeSave);
+        if (!validateEnergySnapshot("before_chunk_save", energy, beforeSave)) {
+            return;
+        }
         ChunkProviderServer provider = world.getChunkProvider();
         Chunk chunk = findLoadedChunk(provider, this.state.pos.getX() >> 4, this.state.pos.getZ() >> 4);
         if (chunk == null) {
@@ -370,6 +382,12 @@ public final class DevValidationRunner {
         this.state.inventoryPersisted = true;
 
         IEnergyHandlerAsync energy = findEnergy(tile.provideMachineComponents());
+        if (!this.state.reloadEnergyObserved) {
+            NBTTagCompound reloaded = new NBTTagCompound();
+            tile.writeToNBT(reloaded);
+            logEnergySnapshot("after_chunk_reload", energy, reloaded);
+            this.state.reloadEnergyObserved = true;
+        }
         if (this.state.energySeeded && (energy == null || energy.getCurrentEnergy() != this.state.expectedEnergy)) {
             if (this.state.ticks - this.state.chunkReloadStartedAt <= CHUNK_RELOAD_SETTLE_TICKS) {
                 return;
@@ -389,6 +407,53 @@ public final class DevValidationRunner {
             return;
         }
         pass();
+    }
+
+    private boolean validateEnergySnapshot(String phase,
+                                           IEnergyHandlerAsync energy,
+                                           NBTTagCompound payload) {
+        long runtimeEnergy = energy == null ? -1L : energy.getCurrentEnergy();
+        long componentEnergy = componentEnergy(payload);
+        long legacyEnergy = payload.hasKey("oneBlockEnergy")
+            ? payload.getLong("oneBlockEnergy")
+            : -1L;
+        logEnergySnapshot(phase, energy, payload);
+        if (this.state.energySeeded
+            && (runtimeEnergy != this.state.expectedEnergy
+                || componentEnergy != this.state.expectedEnergy
+                || legacyEnergy != this.state.expectedEnergy)) {
+            fail(
+                "energy_snapshot_mismatch_" + phase
+                    + ":runtime=" + runtimeEnergy
+                    + ",componentNbt=" + componentEnergy
+                    + ",legacyNbt=" + legacyEnergy
+            );
+            return false;
+        }
+        return true;
+    }
+
+    private void logEnergySnapshot(String phase,
+                                   IEnergyHandlerAsync energy,
+                                   NBTTagCompound payload) {
+        MMCEOneBlock.log.info(
+            "[MMCE One Block DevValidation] energy snapshot phase={} runtime={} componentNbt={} legacyNbt={}",
+            phase,
+            energy == null ? -1L : energy.getCurrentEnergy(),
+            componentEnergy(payload),
+            payload.hasKey("oneBlockEnergy") ? payload.getLong("oneBlockEnergy") : -1L
+        );
+    }
+
+    private long componentEnergy(NBTTagCompound payload) {
+        if (!payload.hasKey(MachineComponentStorage.COMPONENTS_NBT_KEY)) {
+            return -1L;
+        }
+        NBTTagCompound components = payload.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY);
+        if (!components.hasKey("energy_in")) {
+            return -1L;
+        }
+        return components.getCompoundTag("energy_in").getLong("energy");
     }
 
     private boolean validateDestroyDrop(WorldServer world) {
@@ -677,6 +742,7 @@ public final class DevValidationRunner {
         private boolean inventoryPersisted = false;
         private boolean energySeeded = false;
         private boolean energyPersisted = false;
+        private boolean reloadEnergyObserved = false;
         private boolean blockDropped = false;
         private boolean tileCleared = false;
         private boolean done = false;

@@ -43,8 +43,12 @@ public final class OneBlockControllerRuntime {
     }
 
     public void syncDefinition(com.fushu.mmceoneblock.common.config.MachineDefinition definition) {
-        components.syncDefinition(definition);
-        stateSync.updateOneBlockCustomData(false);
+        stateSync.beginRestore();
+        try {
+            components.syncDefinition(definition);
+        } finally {
+            stateSync.endRestore();
+        }
     }
 
     @Nonnull
@@ -55,13 +59,18 @@ public final class OneBlockControllerRuntime {
     }
 
     public void readPayload(NBTTagCompound compound) {
-        setDefinitionId(compound.getString("definitionId"));
-        com.fushu.mmceoneblock.common.config.MachineDefinition definition = host.getDefinition();
-        if (definition != null) {
-            components.syncDefinition(definition);
+        stateSync.beginRestore();
+        try {
+            components.setDefinitionId(compound.getString("definitionId"));
+            stateSync.reset();
+            com.fushu.mmceoneblock.common.config.MachineDefinition definition = host.getDefinition();
+            if (definition != null) {
+                components.syncDefinition(definition);
+            }
+            components.readPayload(compound);
+        } finally {
+            stateSync.endRestore();
         }
-        components.readPayload(compound);
-        stateSync.updateOneBlockCustomData(false);
     }
 
     public void writePayload(NBTTagCompound compound) {

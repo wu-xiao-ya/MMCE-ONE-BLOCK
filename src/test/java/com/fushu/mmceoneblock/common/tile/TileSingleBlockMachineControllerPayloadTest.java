@@ -12,9 +12,13 @@ import org.junit.Test;
 
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public final class TileSingleBlockMachineControllerPayloadTest {
@@ -57,6 +61,85 @@ public final class TileSingleBlockMachineControllerPayloadTest {
         tile.readOneBlockPayload(input);
 
         assertEquals(1000L, energy(tile).getCurrentEnergy());
+    }
+
+    @Test
+    public void transientCacheRebuildPreservesEnergyBeforeAndAfterPayloadRestore() {
+        TestTile original = new TestTile(machineDefinition(1000L));
+        energy(original).setCurrentEnergy(640L);
+        original.clearTransientComponentCache();
+
+        NBTTagCompound payload = new NBTTagCompound();
+        original.writeOneBlockPayload(payload);
+
+        assertEquals(
+            640L,
+            payload.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY)
+                .getCompoundTag("energy").getLong("energy")
+        );
+        assertEquals(640L, payload.getLong("oneBlockEnergy"));
+
+        TestTile restored = new TestTile(machineDefinition(1000L));
+        restored.clearTransientComponentCache();
+        restored.readOneBlockPayload(payload);
+
+        assertEquals(640L, energy(restored).getCurrentEnergy());
+        assertEquals(
+            640L,
+            restored.getCustomDataTag().getLong("oneblock.component.energy.amount")
+        );
+    }
+
+    @Test
+    public void concurrentEnergyUpdatesKeepModernAndLegacyPayloadsConsistent() throws Exception {
+        final TestTile tile = new TestTile(machineDefinition(1000L));
+        final IEnergyHandlerAsync handler = energy(tile);
+        final CountDownLatch start = new CountDownLatch(1);
+        final AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
+
+        Thread updater = new Thread(() -> {
+            await(start, failure);
+            for (int i = 0; i < 500 && failure.get() == null; i++) {
+                handler.setCurrentEnergy(i % 1001);
+            }
+        }, "one-block-energy-updater");
+        Thread serializer = new Thread(() -> {
+            await(start, failure);
+            for (int i = 0; i < 500 && failure.get() == null; i++) {
+                NBTTagCompound payload = new NBTTagCompound();
+                tile.writeOneBlockPayload(payload);
+                long modern = payload.getCompoundTag(MachineComponentStorage.COMPONENTS_NBT_KEY)
+                    .getCompoundTag("energy").getLong("energy");
+                long legacy = payload.getLong("oneBlockEnergy");
+                if (modern != legacy) {
+                    failure.compareAndSet(
+                        null,
+                        new AssertionError("modern=" + modern + ", legacy=" + legacy)
+                    );
+                }
+            }
+        }, "one-block-energy-serializer");
+
+        updater.start();
+        serializer.start();
+        start.countDown();
+        updater.join(TimeUnit.SECONDS.toMillis(20));
+        serializer.join(TimeUnit.SECONDS.toMillis(20));
+
+        assertFalse("energy updater did not finish", updater.isAlive());
+        assertFalse("energy serializer did not finish", serializer.isAlive());
+        assertNull(failure.get());
+    }
+
+    private static void await(CountDownLatch start, AtomicReference<Throwable> failure) {
+        try {
+            if (!start.await(5, TimeUnit.SECONDS)) {
+                failure.compareAndSet(null, new AssertionError("start latch timed out"));
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            failure.compareAndSet(null, ex);
+        }
     }
 
     private static IEnergyHandlerAsync energy(TileSingleBlockMachineController tile) {
@@ -105,6 +188,14 @@ public final class TileSingleBlockMachineControllerPayloadTest {
         @Override
         public MachineDefinition getDefinition() {
             return this.definition;
+        }
+
+        @Override
+        public void markStorageDirty() {
+        }
+
+        @Override
+        public void markStorageForUpdate() {
         }
     }
 }
