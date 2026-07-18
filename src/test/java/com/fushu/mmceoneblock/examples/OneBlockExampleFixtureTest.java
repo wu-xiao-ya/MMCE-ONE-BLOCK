@@ -64,6 +64,7 @@ public final class OneBlockExampleFixtureTest {
         Path smokeMachines = smokeConfig.resolve("mmce-one-block/machines");
         assertTrue(Files.isRegularFile(smokeConfig.resolve("modularmachinery/machinery/starter_machine.json")));
         assertTrue(Files.isRegularFile(smokeConfig.resolve("modularmachinery/recipes/starter_machine_cobblestone_to_stone.json")));
+        assertTrue(Files.isRegularFile(smokeMachines.resolve("advanced_mana_pool_controller.json")));
         assertTrue(Files.isRegularFile(smokeMachines.resolve("starter_controller.json")));
         assertTrue(Files.isRegularFile(smokeMachines.resolve("starter_factory_controller.json")));
         assertTrue(Files.isRegularFile(Paths.get("examples", "optional", "advanced_mana_pool_controller.json")));
@@ -79,6 +80,7 @@ public final class OneBlockExampleFixtureTest {
                 .collect(Collectors.toList());
             assertEquals(
                 Arrays.asList(
+                    "advanced_mana_pool_controller.json",
                     "starter_controller.json",
                     "starter_factory_controller.json"
                 ),
@@ -97,6 +99,8 @@ public final class OneBlockExampleFixtureTest {
 
         JsonObject oneBlock = parse(smokeConfig.resolve("mmce-one-block/machines/starter_controller.json"));
         JsonObject factoryOneBlock = parse(smokeConfig.resolve("mmce-one-block/machines/starter_factory_controller.json"));
+        JsonObject smokeAdvanced = parse(smokeConfig.resolve(
+            "mmce-one-block/machines/advanced_mana_pool_controller.json"));
         JsonObject optionalAdvanced = parse(Paths.get(
             "examples", "optional", "advanced_mana_pool_controller.json"));
         JsonObject style = parse(smokeConfig.resolve("mmceguiext/styles/starter_controller.json"));
@@ -107,9 +111,10 @@ public final class OneBlockExampleFixtureTest {
         assertEquals("mmceoneblock:starter_controller", oneBlock.get("guiStyle").getAsString());
         assertEquals("factory", factoryOneBlock.get("controllerType").getAsString());
         assertEquals("mmceoneblock:factory_controller", factoryOneBlock.get("factoryGuiStyle").getAsString());
+        assertEquals(optionalAdvanced, smokeAdvanced);
         assertEquals(
             "mmceoneblock:advanced_mana_pool_controller_empty",
-            optionalAdvanced.getAsJsonObject("block").get("model").getAsString()
+            smokeAdvanced.getAsJsonObject("block").get("model").getAsString()
         );
         assertEquals("mmceoneblock:starter_controller", style.get("registryname").getAsString());
         assertTrue(style.getAsJsonObject("mmce_gui_ext").has("machineController"));

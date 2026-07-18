@@ -1,0 +1,67 @@
+{
+  "id": "advanced_mana_pool_controller",
+  "machine": "starter_machine",
+  "enabled": true,
+  "displayName": "MMCE One Block Advanced Mana Pool Controller",
+  "block": {
+    "model": "mmceoneblock:advanced_mana_pool_controller_empty",
+    "itemModel": "mmceoneblock:advanced_mana_pool_controller_full",
+    "texture": "mmceoneblock:blocks/advanced_mana_pool_side",
+    "textures": {
+      "particle": "mmceoneblock:blocks/advanced_mana_pool_side",
+      "base": "mmceoneblock:blocks/advanced_mana_pool_base",
+      "side": "mmceoneblock:blocks/advanced_mana_pool_side",
+      "inner": "mmceoneblock:blocks/advanced_mana_pool_inner",
+      "fluid": "mmceoneblock:blocks/advanced_mana_pool_fluid",
+      "port": "mmceoneblock:blocks/advanced_mana_pool_port"
+    },
+    "states": {
+      "unformed": {
+        "model": "mmceoneblock:advanced_mana_pool_controller_empty"
+      },
+      "idle": {
+        "model": "mmceoneblock:advanced_mana_pool_controller_empty"
+      },
+      "working": {
+        "model": "mmceoneblock:advanced_mana_pool_controller_empty"
+      }
+    },
+    "textureLevels": [
+      {
+        "content": "fluid",
+        "minFillRatio": 0.25,
+        "model": "mmceoneblock:advanced_mana_pool_controller_25"
+      },
+      {
+        "content": "fluid",
+        "minFillRatio": 0.5,
+        "model": "mmceoneblock:advanced_mana_pool_controller_50"
+      },
+      {
+        "content": "fluid",
+        "minFillRatio": 0.75,
+        "model": "mmceoneblock:advanced_mana_pool_controller_75"
+      },
+      {
+        "content": "fluid",
+        "minFillRatio": 1.0,
+        "model": "mmceoneblock:advanced_mana_pool_controller_full"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "fluid_input",
+      "id": "mana",
+      "displayName": "Mana",
+      "capacity": 1000000
+    },
+    {
+      "type": "item_input",
+      "id": "items_in",
+      "displayName": "Item Input",
+      "slots": 1
+    }
+  ],
+  "guiStyle": "mmceoneblock:starter_controller"
+}

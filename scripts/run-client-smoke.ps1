@@ -11,6 +11,7 @@ $repoRoot = (Resolve-Path (Join-Path $scriptDir '..')).Path
 $logPath = Join-Path $repoRoot 'run\logs\latest.log'
 $machineCount = [int](& (Join-Path $scriptDir 'Get-SmokeMachineCount.ps1'))
 $expectedFixtures = @(
+    'advanced_mana_pool_controller.json',
     'starter_controller.json',
     'starter_factory_controller.json'
 )

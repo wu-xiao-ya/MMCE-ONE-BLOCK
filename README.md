@@ -59,7 +59,7 @@ The downstream API note for MMCEGE is documented in:
 - `examples/one-block-machine.json` - valid `config/mmce-one-block/machines/` addon definition
 - `examples/client.cfg.sample` - Forge-style sample config for the MMCEGE client config
 - `examples/smoke/` - minimal backing MMCE machine, recipe, starter/factory one-block configs, and standalone MMCEGE controller styles for runtime smoke
-- `examples/optional/advanced_mana_pool_controller.json` - optional pack-facing advanced mana pool sample with state models and fluid-driven `textureLevels`; it is not part of the default smoke set
+- `examples/optional/advanced_mana_pool_controller.json` - pack-facing mirror of the advanced mana pool smoke definition with state models and fluid-driven `textureLevels`
 
 The optional `guiStyle` field is a MMCEGE machine-controller style key. Factory one-block machines can also set `factoryGuiStyle`; it is used by the factory controller GUI before falling back to `guiStyle`.
 Standalone style JSON belongs under `config/mmceguiext/styles/` and uses the usual `registryname` plus either `mmce_gui_ext.machineController` or `mmce_gui_ext.factoryController`. The smoke styles intentionally include text, button, progress bar, dynamic visual, slot group, player inventory, and factory thread tooltip entries so parser coverage exercises the same feature families a pack-facing one-block controller is expected to use.
