@@ -62,7 +62,6 @@ public final class ClientGuiValidationRunner {
     private boolean requestedServerPlacement;
     private boolean placedBlock;
     private boolean requestedGuiOpen;
-    private boolean installedClientFallback;
     private boolean validatingFactoryGui;
     private boolean done;
     private BlockPos pos;
@@ -71,7 +70,6 @@ public final class ClientGuiValidationRunner {
     private int openedAt;
     private int clientTileReadySince;
     private int smartWriteRequestedAt;
-    private TileSingleBlockMachineController clientFallbackTile;
     private boolean smartWriteRequested;
     private volatile boolean smartWriteVerified;
     private volatile boolean smartWriteCheckScheduled;
@@ -204,6 +202,7 @@ public final class ClientGuiValidationRunner {
 
             ((TileSingleBlockMachineController) tile).setDefinitionId(TARGET_ID);
             tile.markDirty();
+            ((TileSingleBlockMachineController) tile).markStorageForUpdate();
             world.notifyBlockUpdate(this.pos, oldState, state, 3);
             player.connection.setPlayerLocation(
                 this.pos.getX() + 0.5D,
@@ -213,6 +212,10 @@ public final class ClientGuiValidationRunner {
                 player.rotationPitch
             );
             player.connection.sendPacket(new SPacketBlockChange(world, this.pos));
+            net.minecraft.network.play.server.SPacketUpdateTileEntity updatePacket = tile.getUpdatePacket();
+            if (updatePacket != null) {
+                player.connection.sendPacket(updatePacket);
+            }
             MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] placed server smoke controller id={} pos={}",
                 TARGET_ID, this.pos);
         } catch (RuntimeException ex) {
@@ -224,16 +227,10 @@ public final class ClientGuiValidationRunner {
         TileSingleBlockMachineController tile = getValidationTile(mc);
         if (tile == null) {
             this.clientTileReadySince = 0;
-            if (!this.installedClientFallback && this.ticks - this.placedAt > 80) {
-                installClientFallbackTile(mc);
-                tile = getValidationTile(mc);
-            }
-            if (tile == null && this.ticks - this.placedAt > 300) {
+            if (this.ticks - this.placedAt > 300) {
                 fail("client_tile_missing_after_server_place");
             }
-            if (tile == null) {
-                return;
-            }
+            return;
         }
         if (!isClientTileReady(tile, "client_tile_not_ready")) {
             return;
@@ -249,15 +246,12 @@ public final class ClientGuiValidationRunner {
 
         this.placedBlock = true;
         this.placedAt = this.ticks;
-        MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] observed {} smoke controller id={} pos={} inventorySlots={}",
-            tile == this.clientFallbackTile ? "fallback" : "client", TARGET_ID, this.pos, tile.getInventory().getSlots());
+        MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] observed client smoke controller id={} pos={} inventorySlots={}",
+            TARGET_ID, this.pos, tile.getInventory().getSlots());
     }
 
     private void requestServerGuiOpen(Minecraft mc) {
         TileSingleBlockMachineController tile = getTile(mc);
-        if (tile == null) {
-            tile = this.clientFallbackTile;
-        }
         if (tile == null) {
             if (this.ticks - this.placedAt > 80) {
                 fail("tile_missing");
@@ -303,37 +297,6 @@ public final class ClientGuiValidationRunner {
 
     private EntityPlayerMP serverPlayer(MinecraftServer server) {
         return this.playerId == null ? null : server.getPlayerList().getPlayerByUUID(this.playerId);
-    }
-
-    private void installClientFallbackTile(Minecraft mc) {
-        BlockSingleBlockMachineController block = MachineRegistry.getBlock(TARGET_ID);
-        if (block == null || mc.world == null || this.pos == null || !mc.world.isBlockLoaded(this.pos)) {
-            return;
-        }
-
-        net.minecraft.block.state.IBlockState state = block.getDefaultState()
-            .withProperty(BlockController.FACING, EnumFacing.NORTH);
-        mc.world.setBlockState(this.pos, state, 3);
-
-        TileEntity tile = block.createTileEntity(mc.world, state);
-        if (!(tile instanceof TileSingleBlockMachineController)) {
-            fail("client_fallback_tile_unexpected:" + className(tile));
-            return;
-        }
-
-        tile.setWorld(mc.world);
-        tile.setPos(this.pos);
-        ((TileSingleBlockMachineController) tile).setDefinitionId(TARGET_ID);
-        tile.validate();
-        ((TileSingleBlockMachineController) tile).provideMachineComponents();
-        mc.world.setTileEntity(this.pos, tile);
-        if (!(mc.world.getTileEntity(this.pos) instanceof TileSingleBlockMachineController)) {
-            mc.world.getChunk(this.pos).addTileEntity(tile);
-        }
-        this.clientFallbackTile = (TileSingleBlockMachineController) tile;
-        this.installedClientFallback = true;
-        MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] installed client fallback controller id={} pos={}",
-            TARGET_ID, this.pos);
     }
 
     private boolean isClientTileReady(TileSingleBlockMachineController tile, String reason) {
@@ -828,8 +791,7 @@ public final class ClientGuiValidationRunner {
     }
 
     private TileSingleBlockMachineController getValidationTile(Minecraft mc) {
-        TileSingleBlockMachineController tile = getTile(mc);
-        return tile == null ? this.clientFallbackTile : tile;
+        return getTile(mc);
     }
 
     private static String className(Object value) {
