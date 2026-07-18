@@ -63,7 +63,6 @@ public final class ClientGuiValidationRunner {
     private boolean placedBlock;
     private boolean requestedGuiOpen;
     private boolean installedClientFallback;
-    private boolean directFallbackGuiOpen;
     private boolean validatingFactoryGui;
     private boolean done;
     private BlockPos pos;
@@ -256,9 +255,8 @@ public final class ClientGuiValidationRunner {
 
     private void requestServerGuiOpen(Minecraft mc) {
         TileSingleBlockMachineController tile = getTile(mc);
-        if (tile == null && this.clientFallbackTile != null) {
-            requestDirectFallbackGuiOpen(mc);
-            return;
+        if (tile == null) {
+            tile = this.clientFallbackTile;
         }
         if (tile == null) {
             if (this.ticks - this.placedAt > 80) {
@@ -278,31 +276,6 @@ public final class ClientGuiValidationRunner {
         this.requestedGuiOpen = true;
         this.openedAt = this.ticks;
         server.addScheduledTask(() -> openSmokeControllerGuiOnServer(server));
-    }
-
-    private void requestDirectFallbackGuiOpen(Minecraft mc) {
-        TileSingleBlockMachineController tile = this.clientFallbackTile;
-        if (tile == null) {
-            fail("fallback_tile_missing_before_open");
-            return;
-        }
-        if (!isClientTileReady(tile, "client_fallback_tile_not_ready_before_open")) {
-            return;
-        }
-
-        ContainerSingleBlockController container = new ContainerSingleBlockController(tile, mc.player);
-        GuiScreen screen = ClientGuiBridge.createSingleBlockControllerGui(container);
-        if (screen == null) {
-            fail("fallback_gui_missing");
-            return;
-        }
-
-        this.requestedGuiOpen = true;
-        this.directFallbackGuiOpen = true;
-        this.openedAt = this.ticks;
-        mc.displayGuiScreen(screen);
-        MMCEOneBlock.log.info("[MMCE One Block ClientGuiValidation] requested direct fallback GUI open id={} pos={}",
-            TARGET_ID, this.pos);
     }
 
     private void openSmokeControllerGuiOnServer(MinecraftServer server) {
@@ -462,7 +435,7 @@ public final class ClientGuiValidationRunner {
             blueprintSlot,
             firstInternalSlot,
             EXPECTED_STYLE,
-            this.directFallbackGuiOpen ? "directFallback" : "serverGuiHandler",
+            "serverGuiHandler",
             SMART_INTERFACE_KEY,
             SMART_INTERFACE_VALUE
         );
