@@ -40,6 +40,7 @@ public final class DevValidationRunner {
     private static final int FIRST_OUTPUT_SLOT = 10;
     private static final int REDSTONE_PAUSE_TICKS = 60;
     private static final int OUTPUT_BLOCK_TICKS = 60;
+    private static final int CHUNK_RELOAD_SETTLE_TICKS = 40;
     private static boolean registered = false;
 
     private final ValidationState state = new ValidationState();
@@ -345,6 +346,9 @@ public final class DevValidationRunner {
 
     private void reloadChunkAndValidate(WorldServer world) {
         ChunkProviderServer provider = world.getChunkProvider();
+        if (this.state.chunkReloadStartedAt < 0) {
+            this.state.chunkReloadStartedAt = this.state.ticks;
+        }
         provider.loadChunk(this.state.pos.getX() >> 4, this.state.pos.getZ() >> 4);
         TileSingleBlockMachineController tile = getTile(world);
         if (tile == null) {
@@ -367,6 +371,9 @@ public final class DevValidationRunner {
 
         IEnergyHandlerAsync energy = findEnergy(tile.provideMachineComponents());
         if (this.state.energySeeded && (energy == null || energy.getCurrentEnergy() != this.state.expectedEnergy)) {
+            if (this.state.ticks - this.state.chunkReloadStartedAt <= CHUNK_RELOAD_SETTLE_TICKS) {
+                return;
+            }
             fail("energy_mismatch_after_chunk_reload:" + (energy == null ? "missing" : Long.toString(energy.getCurrentEnergy())));
             return;
         }
@@ -666,6 +673,7 @@ public final class DevValidationRunner {
         private boolean persistencePrepared = false;
         private boolean chunkUnloaded = false;
         private boolean chunkReloaded = false;
+        private int chunkReloadStartedAt = -1;
         private boolean inventoryPersisted = false;
         private boolean energySeeded = false;
         private boolean energyPersisted = false;
