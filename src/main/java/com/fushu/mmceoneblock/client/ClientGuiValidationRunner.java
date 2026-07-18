@@ -19,6 +19,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.init.Blocks;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.network.play.server.SPacketBlockChange;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.tileentity.TileEntity;
@@ -569,12 +570,20 @@ public final class ClientGuiValidationRunner {
                 }
                 SmartInterfaceData data = ((TileSingleBlockMachineController) tile)
                     .getSmartInterfaceData(SMART_INTERFACE_KEY);
-                if (data != null && Math.abs(data.getValue() - SMART_INTERFACE_VALUE) <= 0.0001F) {
+                NBTTagCompound customData =
+                    ((TileSingleBlockMachineController) tile).getCustomDataTag();
+                boolean hasCustomValue = customData != null && customData.hasKey(SMART_INTERFACE_KEY);
+                float observedValue = data != null
+                    ? data.getValue()
+                    : hasCustomValue ? customData.getFloat(SMART_INTERFACE_KEY) : Float.NaN;
+                if (Float.isFinite(observedValue)
+                    && Math.abs(observedValue - SMART_INTERFACE_VALUE) <= 0.0001F) {
                     this.smartWriteVerified = true;
                     MMCEOneBlock.log.info(
-                        "[MMCE One Block ClientGuiValidation] verified virtual Smart Interface write key={} value={}",
+                        "[MMCE One Block ClientGuiValidation] verified virtual Smart Interface write key={} value={} source={}",
                         SMART_INTERFACE_KEY,
-                        data.getValue()
+                        observedValue,
+                        data == null ? "customData" : "smartInterface"
                     );
                 } else {
                     this.smartWriteCheckScheduled = false;
